@@ -42,6 +42,8 @@ start
 ```
 7. For the demo start a new Wings of Liberty campaign in StarCraft 2 and start the first mission.
 
+Note: For custom text to be displayed correctly you need to have your game language switched to English
+
 
 Note: You can launch StarCraft 2 listening to the SC2API after setting the StarCraft 2 installation folder and giving the "launch" command.
 You can then currently only send Ping messages to the game. 
