@@ -1,0 +1,3 @@
+﻿DocInfo/DescLong=Integrates Neuro Sama into the WoL campaign
+DocInfo/DescShort=1... kinda
+DocInfo/Name=Neuro WoL Integration

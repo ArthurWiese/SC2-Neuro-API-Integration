@@ -1,0 +1,4 @@
+int CreateDialogItemFromTemplate(int dialog, int type, string template)
+{
+    return DialogControlCreateFromTemplate(dialog, type, template);
+}

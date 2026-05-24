@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Catalog>
+    <CConversationState id="LabResearch"/>
+    <CConversationState id="LabResearchConstants"/>
+    <CConversationState id="LabResearchObject"/>
+    <CConversationState id="LabResearchText"/>
+</Catalog>
