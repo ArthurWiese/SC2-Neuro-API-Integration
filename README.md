@@ -50,7 +50,7 @@ This method of communicating with the game turned out to be a dead end for creat
 ## Documentation
 See documentation to learn how to mod StarCraft 2 to work with the Neuro API: 
 
-[SC2 Neuro API Integration Documentation]()
+[SC2 Neuro API Integration Documentation](Documentation/Documentation.md)
 
 ## Licensing
 - Original maps are owned by Blizzard®
