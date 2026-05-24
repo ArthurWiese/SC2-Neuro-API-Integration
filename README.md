@@ -24,8 +24,8 @@ Copy the [.SC2Map folders](Maps) into the Maps\Campaign folder (maybe need to cr
 ```
 ...\StarCraft II\Maps\Campaign\<Here .SC2Map folders>
 ```
-3. Install the required modules for Python ([requirements.txt](requirements)) or create an environment with [environment.yml](environment)
-4. Start the integration terminal by running [SC2_integration.py](SC2_integration) with Python
+3. Install the required modules for Python ([requirements.txt](requirements.txt)) or create an environment with [environment.yml](environment.yml)
+4. Start the integration terminal by running [SC2_integration.py](SC2_integration.py) with Python
 5. Set the banks path in the integration terminal
 ```
 banks_path <...\Documents\StarCraft II\Accounts\...\...\Banks>
@@ -53,8 +53,8 @@ See documentation to learn how to mod StarCraft 2 to work with the Neuro API:
 ## Licensing
 - Original maps are owned by Blizzard®
 - This repo contains original Blizzard® assets. These are part of the base game and licensed by their terms
-- This repo contains code from from the StarCraft II Client - protocol by Blizzard®. See [License](License (s2client-proto)). See [Repo](https://github.com/Blizzard/s2client-proto)
-- This repo contains code form the StarCraft II API Client for Python 3 by BurnySc2. See [License](License (python-sc2)). See [Repo](https://github.com/BurnySc2/python-sc2)
+- This repo contains code from from the StarCraft II Client - protocol by Blizzard®. See [License](License (s2client-proto).txt). See [Repo](https://github.com/Blizzard/s2client-proto)
+- This repo contains code form the StarCraft II API Client for Python 3 by BurnySc2. See [License](License (python-sc2).txt). See [Repo](https://github.com/BurnySc2/python-sc2)
 - Otherwise [License](LICENSE) applies
 
 Blizzard is a registered trademark of Blizzard Entertainment, Inc
