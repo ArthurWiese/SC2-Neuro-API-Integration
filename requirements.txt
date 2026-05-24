@@ -1,0 +1,5 @@
+aiohttp
+psutil
+protobuf
+watchdog
+websockets
