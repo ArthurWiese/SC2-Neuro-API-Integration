@@ -16,7 +16,7 @@ If you want to contribute to the SC2 Neuro WoL Integration see [Neuro-sama Disco
 Note: Should only work on Windows for now (Because of file paths, etc...)
 
 1. Download or clone the repo
-2. To play a demo of the integration in action copy the [.SC2Mod folder](Mod) into the Mods folder in your StarCraft 2 installation:
+2. To play a demo of the integration in action, copy the [.SC2Mod folder](Mod) into the Mods folder in your StarCraft 2 installation:
 ```
 ...\StarCraft II\Mods\<Here .SC2Mod folder>
 ```
@@ -55,7 +55,7 @@ See documentation to learn how to mod StarCraft 2 to work with the Neuro API:
 - This repo contains original Blizzard® assets. These are part of the base game and licensed by their terms
 - This repo contains code from from the StarCraft II Client - protocol by Blizzard®. See [License](License (s2client-proto)). See [Repo](https://github.com/Blizzard/s2client-proto)
 - This repo contains code form the StarCraft II API Client for Python 3 by BurnySc2. See [License](License (python-sc2)). See [Repo](https://github.com/BurnySc2/python-sc2)
-- Otherwise HERE LICENSE applies. See [License]()
+- Otherwise [License](LICENSE) applies
 
 Blizzard is a registered trademark of Blizzard Entertainment, Inc
 
