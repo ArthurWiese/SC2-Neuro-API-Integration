@@ -376,7 +376,7 @@ class NeuroIntegrationRuntimeMixin:
         new_in_mission = game_state.get("in_mission", False)
 
         if new_in_mission:
-            active_changed = self._record_game_state_active_value(int(game_state.get("active", 0)))
+            active_changed = self._record_game_state_active_value(game_state.get("active", 0))
             if active_changed:
                 # Notify action queue worker that a new active value was recorded
                 # This opens a 0.3s processing window for the next queued action
@@ -920,22 +920,16 @@ class NeuroIntegrationRuntimeMixin:
         return None
 
     async def _process_action_queue(self) -> None:
-        """Process one action per active value change, within 0.3s window.
-        
-        This synchronizes action writes with the game's active value updates,
-        reducing conflicts between integration writes and game reads/writes.
-        """
         try:
             while self._integration_stop_event is not None and not self._integration_stop_event.is_set():
                 async with self._action_queue_condition:
-                    # Wait for queue to have items, be in mission, and not paused
                     loop = asyncio.get_running_loop()
                     while (
                         self._integration_stop_event is not None
                         and not self._integration_stop_event.is_set()
                         and (
                             not self._action_queue
-                            or self._in_mission is not True
+                            or not self._in_mission
                             or self._game_is_paused
                             or self._game_is_blocking
                             or self._bank_update_in_progress
@@ -959,17 +953,16 @@ class NeuroIntegrationRuntimeMixin:
                     if not self._action_queue:
                         continue
 
-                    # Check if we're within 0.3s of the last active value change
+                    # Check if within 0.3s of the last active value change
                     loop = asyncio.get_running_loop()
                     now = loop.time()
                     last_change = self._game_state_active_last_changed_time
                     
                     if last_change is None or (now - last_change) > 0.3:
-                        # Outside the 0.3s window; wait for next active change
                         await self._action_queue_condition.wait()
                         continue
 
-                    # We're within the 0.3s window; pop and execute one action
+                    # Is within the 0.3s window
                     action_command = self._action_queue.popleft()
 
                 await self._execute_queued_action_command(action_command)
