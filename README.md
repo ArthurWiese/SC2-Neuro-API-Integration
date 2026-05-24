@@ -5,7 +5,7 @@ In the [Mod](Mod) and [Maps](Maps) folders is a demo for the implementation of t
 
 Tested with [Gary](https://github.com/Govorunb/gary)
 
-Please report any issues and ideas in the [Neuro-sama Discord]() under projects/SC2 Neuro WoL Integration
+Please report any issues and give feedback in the [Neuro-sama Discord]() under projects/SC2 Neuro WoL Integration
 
 ## What I want to use this integration for
 My goal is to create a custom Wings of Liberty campaign experience where Neuro gets context, triggers effects in the game and selects, gains and uses permanent abilities over the course of the campaign
