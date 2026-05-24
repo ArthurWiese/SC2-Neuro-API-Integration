@@ -163,8 +163,15 @@ class NeuroIntegrationRuntimeMixin:
         self.print_line(f"Connecting to Neuro websocket at {self.NEURO_URL}...", 1)
 
         timeout = aiohttp.ClientTimeout(total=15)
-        self._neuro_session = aiohttp.ClientSession(timeout=timeout)
-        self._neuro_ws = await self._neuro_session.ws_connect(self.NEURO_URL)
+        session = aiohttp.ClientSession(timeout=timeout)
+        try:
+            ws = await session.ws_connect(self.NEURO_URL)
+        except Exception:
+            await session.close()
+            raise
+
+        self._neuro_session = session
+        self._neuro_ws = ws
         self.print_line("Connected to Neuro websocket.", 1)
 
         self._neuro_listener_task = asyncio.create_task(self._listen_neuro_messages(), name="neuro-listener")
@@ -197,6 +204,7 @@ class NeuroIntegrationRuntimeMixin:
                 return True
             except (aiohttp.ClientError, OSError, TimeoutError, RuntimeError, ValueError) as exc:
                 self.print_line(f"Neuro reconnect attempt failed: {exc}", 0)
+                await self._close_neuro_connection()
                 await asyncio.sleep(backoff_seconds)
                 backoff_seconds = min(backoff_seconds * 2, 8.0)
 
