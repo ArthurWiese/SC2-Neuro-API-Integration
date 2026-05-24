@@ -53,8 +53,8 @@ See documentation to learn how to mod StarCraft 2 to work with the Neuro API:
 ## Licensing
 - Original maps are owned by Blizzard®
 - This repo contains original Blizzard® assets. These are part of the base game and licensed by their terms
-- This repo contains code from from the StarCraft II Client - protocol by Blizzard®. See [License](License (s2client-proto).txt). See [Repo](https://github.com/Blizzard/s2client-proto)
-- This repo contains code form the StarCraft II API Client for Python 3 by BurnySc2. See [License](License (python-sc2).txt). See [Repo](https://github.com/BurnySc2/python-sc2)
+- This repo contains code from from the StarCraft II Client - protocol by Blizzard®. See [License](License%20%28s2client-proto%29.txt). See [Repo](https://github.com/Blizzard/s2client-proto)
+- This repo contains code form the StarCraft II API Client for Python 3 by BurnySc2. See [License](License%20%28python-sc2%29.txt). See [Repo](https://github.com/BurnySc2/python-sc2)
 - Otherwise [License](LICENSE) applies
 
 Blizzard is a registered trademark of Blizzard Entertainment, Inc
