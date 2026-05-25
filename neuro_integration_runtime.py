@@ -537,6 +537,8 @@ class NeuroIntegrationRuntimeMixin:
             await self._send_neuro_unregister_actions(missing_names)
             for name in missing_names:
                 self._active_actions.pop(name, None)
+                # Remove any queued commands for the unregistered action
+                self._action_queue = deque(action for action in self._action_queue if action.get("name") != name)
 
         names_to_register = new_names + [name for name in changed_names if name not in new_names]
         if names_to_register:
@@ -864,11 +866,8 @@ class NeuroIntegrationRuntimeMixin:
 
         await self._send_neuro_action_result(action_id, True, f"Action '{action_name}' is being executed.")
 
-        queue_was_full, removed_action = self._enqueue_action_command({"id": action_id, "name": action_name, "args": action_args})
-        if queue_was_full:
-
-            await self._send_neuro_context(f"Action command queue is full. The oldest queued command was removed to make room for a newer command.\nRemoved queued command: {self._format_action_command_for_context(removed_action)}")
-    
+        await self._enqueue_action_command({"id": action_id, "name": action_name, "args": action_args})
+       
         await self._notify_action_queue_state_changed()
 
     def _parse_action_arguments(self, raw_data: Any, schema: dict[str, Any] | None = None) -> dict[str, Any] | None | Exception:
@@ -1012,13 +1011,13 @@ class NeuroIntegrationRuntimeMixin:
         except Exception as exc:
             self.print_line(f"Action queue worker error: {exc}", 0)
 
-    def _enqueue_action_command(self, action_command: dict[str, Any]) -> tuple[bool, dict[str, Any] | None]:
+    async def _enqueue_action_command(self, action_command: dict[str, Any]) -> None:
         queue_full = len(self._action_queue) >= 3
         removed_action: dict[str, Any] | None = None
         if queue_full:
             removed_action = self._action_queue.popleft()
+            await self._send_neuro_context(f"Action command queue is full. The oldest queued command was removed to make room for a newer command.\nRemoved queued command: {self._format_action_command_for_context(removed_action)}")
         self._action_queue.append(action_command)
-        return queue_full, removed_action
 
     async def _execute_queued_action_command(self, action_command: dict[str, Any]) -> None:
         action_id = str(action_command.get("id") or "").strip()
