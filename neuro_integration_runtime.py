@@ -351,20 +351,31 @@ class NeuroIntegrationRuntimeMixin:
             pass
 
     async def _handle_bank_file_updated(self) -> None:
+        if self._bank_file_path is None or not self._bank_file_path.exists():
+            self._clear_game_state_active_watchdog_state()
+            self._game_is_paused = False
+            self._action_queue.clear()
+            await self._notify_action_queue_state_changed()
+            return
+
         try:
             bank_data = parse_bank_file(self._bank_file_path)
+        except FileNotFoundError:
+            self._clear_game_state_active_watchdog_state()
+            self._game_is_paused = False
+            self._action_queue.clear()
+            await self._notify_action_queue_state_changed()
+            return
         except ET.ParseError:
             self.print_line("Bank parse failed on file change; retrying on the next change event.", 0)
             return
         
         if not bank_data or "game_state" not in bank_data:
             self.print_line("Bank file is empty or incomplete. Deregistering all action commands.", 0)
-            try:
-                await self._unregister_all_active_actions()
-            except Exception as exc:
-                self.print_line(f"Failed to unregister active actions after empty bank data: {exc}", 0)
-            self._action_queue.clear()
-            await self._notify_action_queue_state_changed()
+            # Game probably entered intermission if the bank file is empty or incomplete
+            await self._send_neuro_context("Entered intermission; game cannot process commands until the next mission starts.")
+            await asyncio.sleep(2)
+            await self._cleanup_bank_file()
             return
 
         if bank_data == self._last_parsed_bank_data:
@@ -388,22 +399,18 @@ class NeuroIntegrationRuntimeMixin:
             self._clear_game_state_active_watchdog_state()
             self._game_is_paused = False
 
-        possible_actions = bank_data.get("possible_actions", {})
-        game_context = bank_data.get("game_context", {})
-        force_action = bank_data.get("force_action", {})
-
         if self._in_mission and not new_in_mission:
             self._in_mission = False
             await self._send_neuro_context("Entered intermission; game cannot process commands until the next mission starts.")
             await asyncio.sleep(2)
-            await self._run_serialized_bank_write(lambda: deactivate_everything(self._bank_file_path))
-            await self._handle_bank_file_updated()
-            self._action_queue.clear()
-            self.print_line("Entered intermission; deactivated all bank flags.", 2)
+            await self._cleanup_bank_file()
+            # await self._run_serialized_bank_write(lambda: deactivate_everything(self._bank_file_path))
+            # await self._handle_bank_file_updated()
+            # self._action_queue.clear()
+            # self.print_line("Entered intermission; deactivated all bank flags.", 2)
             return
         elif not self._in_mission and new_in_mission:
             self._in_mission = True
-            self._action_queue.clear()
             await self._send_neuro_context("Entered mission; game can now process commands.")
             self.print_line("Entered mission.", 2)
         elif self._in_mission is None:
@@ -423,40 +430,70 @@ class NeuroIntegrationRuntimeMixin:
             self.print_line("Game is blocking commands", 2)
         elif self._game_is_blocking is None:
             self._game_is_blocking = new_is_blocking
+        await self._notify_action_queue_state_changed()
+
+        game_context = bank_data.get("game_context", {})
+        possible_actions = bank_data.get("possible_actions", {})
+        force_action = bank_data.get("force_action", {})
+        
+        if self._in_mission is True:
+            skip = await self._skip_if_unsafe_bank_write_window()
+            if skip:
+                return
 
         self._bank_update_in_progress = True
-        try:
-            if self._in_mission is True:
-                should_continue = await self._wait_for_safe_bank_write_window()
-                if not should_continue:
-                    return
+        await self._notify_action_queue_state_changed()
 
-            await self._update_game_context(game_context)
+        await self._clear_queue(game_state)
 
-            await self._sync_possible_actions(possible_actions)
+        await self._update_game_context(game_context)
 
-            await self._process_force_action(force_action)
-        finally:
-            self._bank_update_in_progress = False
-            await self._notify_action_queue_state_changed()
+        await self._sync_possible_actions(possible_actions)
+    
+        await self._process_force_action(force_action)
+    
+        self._bank_update_in_progress = False
+        await self._notify_action_queue_state_changed()
 
-    async def _wait_for_safe_bank_write_window(self) -> bool:
-        while (
-            self._integration_stop_event is not None
-            and not self._integration_stop_event.is_set()
-            and self._in_mission is True
-            and not self._game_is_paused
-        ):
-            last_changed_time = self._game_state_active_last_changed_time
-            if last_changed_time is not None:
-                elapsed_seconds = asyncio.get_running_loop().time() - last_changed_time
-                if elapsed_seconds < 0.3:
-                    return True
+    async def _skip_if_unsafe_bank_write_window(self) -> bool:
+        last_changed_time = self._game_state_active_last_changed_time
+        if last_changed_time is not None:
+            elapsed_seconds = asyncio.get_running_loop().time() - last_changed_time
+            if elapsed_seconds < 0.3:
                 return False
+            return True
 
-            async with self._action_queue_condition:
-                await self._action_queue_condition.wait()
-        return True
+            # async with self._action_queue_condition:
+            #     await self._action_queue_condition.wait()
+        return False
+    
+    async def _clear_queue(self, game_state: dict[str, Any]) -> None:
+        clear_queue = game_state.get("clear_queue", False)
+        if clear_queue:
+            if len(self._action_queue) != 0:
+                action_summary = ""
+                for queued_action in self._action_queue:
+                    action_summary += self._format_action_command_for_context(queued_action)
+                self.print_line(f"Clearing action queue due to game request. Queued actions: {self._action_queue}", 2)
+                await self._send_neuro_context(f"Clearing action queue due to game request. Actions that will not be processed: {action_summary}")
+                self._action_queue.clear()
+                await self._notify_action_queue_state_changed()
+            update = {"game_state": {"clear_queue": False}}
+            await self._run_serialized_bank_write(lambda: write_bank_values(self._bank_file_path, update))
+
+    def _format_action_command_for_context(self, action_command: dict[str, Any]) -> str:
+        action_name = action_command.get("name")
+        action_args = action_command.get("args")
+
+        arguments: list[str] = []
+        for argument_name in sorted(action_args):
+            argument_value = action_args[argument_name]
+            arguments.append(f"{argument_value}")
+
+        if arguments:
+            return f"{action_name} with argument/s: {', '.join(arguments)}. "
+        else:
+            return f"{action_name}"
 
     async def _update_game_context(self, game_context: dict[str, Any]) -> None:
         if not isinstance(game_context, dict) or self._bank_file_path is None:
@@ -827,9 +864,11 @@ class NeuroIntegrationRuntimeMixin:
 
         await self._send_neuro_action_result(action_id, True, f"Action '{action_name}' is being executed.")
 
-        queue_was_full = self._enqueue_action_command({"id": action_id, "name": action_name, "args": action_args})
+        queue_was_full, removed_action = self._enqueue_action_command({"id": action_id, "name": action_name, "args": action_args})
         if queue_was_full:
-            await self._send_neuro_context("Action command queue is full. New commands remove older commands from the queue.")
+
+            await self._send_neuro_context(f"Action command queue is full. The oldest queued command was removed to make room for a newer command.\nRemoved queued command: {self._format_action_command_for_context(removed_action)}")
+    
         await self._notify_action_queue_state_changed()
 
     def _parse_action_arguments(self, raw_data: Any, schema: dict[str, Any] | None = None) -> dict[str, Any] | None | Exception:
@@ -973,12 +1012,13 @@ class NeuroIntegrationRuntimeMixin:
         except Exception as exc:
             self.print_line(f"Action queue worker error: {exc}", 0)
 
-    def _enqueue_action_command(self, action_command: dict[str, Any]) -> bool:
+    def _enqueue_action_command(self, action_command: dict[str, Any]) -> tuple[bool, dict[str, Any] | None]:
         queue_full = len(self._action_queue) >= 3
+        removed_action: dict[str, Any] | None = None
         if queue_full:
-            self._action_queue.popleft()
+            removed_action = self._action_queue.popleft()
         self._action_queue.append(action_command)
-        return queue_full
+        return queue_full, removed_action
 
     async def _execute_queued_action_command(self, action_command: dict[str, Any]) -> None:
         action_id = str(action_command.get("id") or "").strip()
@@ -1043,10 +1083,11 @@ class NeuroIntegrationRuntimeMixin:
                     else:
                         if not deactivated_for_current_outage and self._bank_file_path is not None and self._bank_file_path.exists():
                             try:
-                                await self._run_serialized_bank_write(lambda: deactivate_everything(self._bank_file_path))
-                                self._action_queue.clear()
+                                # await self._run_serialized_bank_write(lambda: deactivate_everything(self._bank_file_path))
+                                # self._action_queue.clear()
                                 deactivated_for_current_outage = True
-                                self.print_line('SC2 not running — deactivated all bank flags.', 2)
+                                self.print_line('SC2 not running — clearing bank file.', 2)
+                                await self._cleanup_bank_file()
                             except Exception as exc:
                                 self.print_line(f'SC2 watchdog failed to deactivate bank file: {exc}', 0)
                     await asyncio.sleep(5.0)
@@ -1117,6 +1158,20 @@ class NeuroIntegrationRuntimeMixin:
 
         async with self._bank_write_lock:
             write_operation()
+
+    async def _cleanup_bank_file(self) -> None:
+        if self._bank_file_path is not None:
+            try:
+                self._bank_file_path.unlink(missing_ok=True)
+                self.print_line("Deleted empty/incomplete bank file.", 2)
+            except OSError as exc:
+                self.print_line(f"Failed to delete empty/incomplete bank file: {exc}", 0)
+        try:
+            await self._unregister_all_active_actions()
+        except Exception as exc:
+            self.print_line(f"Failed to unregister active actions after empty bank data: {exc}", 0)
+        self._action_queue.clear()
+        await self._notify_action_queue_state_changed()
 
     async def _cleanup_integration_runtime(self) -> None:
         if self._bank_monitor_task is not None:

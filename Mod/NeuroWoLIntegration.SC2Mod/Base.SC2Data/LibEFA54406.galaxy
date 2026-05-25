@@ -33,12 +33,7 @@ void libEFA54406_gf_create_action_0_arg (string lp_action_name, bool lp_action_a
     libEFA54406_gv_bankwriteallowed = false;
     BankLoad("NeuroIntegration", 1);
     BankWait(BankLastCreated());
-    if ((lp_action_active == true)) {
-        BankValueSetFromFlag(BankLastCreated(), "possible_actions", (lp_action_name + "_active"), true);
-    }
-    else {
-        BankValueSetFromFlag(BankLastCreated(), "possible_actions", (lp_action_name + "_active"), false);
-    }
+    BankValueSetFromFlag(BankLastCreated(), "possible_actions", (lp_action_name + "_active"), lp_action_active);
     BankValueSetFromString(BankLastCreated(), "possible_actions", (lp_action_name + "_description"), lp_action_description);
     BankValueSetFromInt(BankLastCreated(), "possible_actions", (lp_action_name + "_uses"), lp_action_uses);
     BankSave(BankLastCreated());
@@ -54,12 +49,7 @@ void libEFA54406_gf_create_action_1_arg (string lp_action_name, bool lp_action_a
     libEFA54406_gv_bankwriteallowed = false;
     BankLoad("NeuroIntegration", 1);
     BankWait(BankLastCreated());
-    if ((lp_action_active == true)) {
-        BankValueSetFromFlag(BankLastCreated(), "possible_actions", (lp_action_name + "_active"), true);
-    }
-    else {
-        BankValueSetFromFlag(BankLastCreated(), "possible_actions", (lp_action_name + "_active"), false);
-    }
+    BankValueSetFromFlag(BankLastCreated(), "possible_actions", (lp_action_name + "_active"), lp_action_active);
     BankValueSetFromString(BankLastCreated(), "possible_actions", (lp_action_name + "_description"), lp_action_description);
     BankValueSetFromString(BankLastCreated(), "possible_actions", (lp_action_name + "_arg_1"), lp_action_argument_1_type);
     BankValueSetFromInt(BankLastCreated(), "possible_actions", (lp_action_name + "_uses"), lp_action_uses);
@@ -76,12 +66,7 @@ void libEFA54406_gf_create_action_2_arg (string lp_action_name, bool lp_action_a
     libEFA54406_gv_bankwriteallowed = false;
     BankLoad("NeuroIntegration", 1);
     BankWait(BankLastCreated());
-    if ((lp_action_active == true)) {
-        BankValueSetFromFlag(BankLastCreated(), "possible_actions", (lp_action_name + "_active"), true);
-    }
-    else {
-        BankValueSetFromFlag(BankLastCreated(), "possible_actions", (lp_action_name + "_active"), false);
-    }
+    BankValueSetFromFlag(BankLastCreated(), "possible_actions", (lp_action_name + "_active"), lp_action_active);
     BankValueSetFromString(BankLastCreated(), "possible_actions", (lp_action_name + "_description"), lp_action_description);
     BankValueSetFromString(BankLastCreated(), "possible_actions", (lp_action_name + "_arg_1"), lp_action_argument_1_type);
     BankValueSetFromString(BankLastCreated(), "possible_actions", (lp_action_name + "_arg_2"), lp_action_argument_2_type);
@@ -99,12 +84,7 @@ void libEFA54406_gf_create_action_3_arg (string lp_action_name, bool lp_action_a
     libEFA54406_gv_bankwriteallowed = false;
     BankLoad("NeuroIntegration", 1);
     BankWait(BankLastCreated());
-    if ((lp_action_active == true)) {
-        BankValueSetFromFlag(BankLastCreated(), "possible_actions", (lp_action_name + "_active"), true);
-    }
-    else {
-        BankValueSetFromFlag(BankLastCreated(), "possible_actions", (lp_action_name + "_active"), false);
-    }
+    BankValueSetFromFlag(BankLastCreated(), "possible_actions", (lp_action_name + "_active"), lp_action_active);
     BankValueSetFromString(BankLastCreated(), "possible_actions", (lp_action_name + "_description"), lp_action_description);
     BankValueSetFromString(BankLastCreated(), "possible_actions", (lp_action_name + "_arg_1"), lp_action_argument_1_type);
     BankValueSetFromString(BankLastCreated(), "possible_actions", (lp_action_name + "_arg_2"), lp_action_argument_2_type);
@@ -145,6 +125,24 @@ void libEFA54406_gf_create_context (string lp_context_name, string lp_context, b
     BankValueSetFromFlag(BankLastCreated(), "game_context", (lp_context_name + "_silent"), lp_silent);
     BankSave(BankLastCreated());
     libEFA54406_gv_bankwriteallowed = true;
+}
+
+void libEFA54406_gf_UnblockCommands (bool lp_clear_queue) {
+    // Automatic Variable Declarations
+    // Implementation
+    while ((libEFA54406_gv_bankwriteallowed == false)) {
+        Wait(0.01, c_timeGame);
+    }
+    libEFA54406_gv_bankwriteallowed = false;
+    BankLoad("NeuroIntegration", 1);
+    BankWait(BankLastCreated());
+    BankValueSetFromFlag(BankLastCreated(), "game_state", "is_blocking", false);
+    BankSave(BankLastCreated());
+    libEFA54406_gv_bankwriteallowed = true;
+    if ((lp_clear_queue == true)) {
+        TriggerExecute(libEFA54406_gt_ClearQueue, true, false);
+    }
+
 }
 
 // Triggers
@@ -194,12 +192,7 @@ void libEFA54406_gt_DisableAchievementsCheats_Init () {
 // Trigger: Create initial NeuroIntegration bank
 //--------------------------------------------------------------------------------------------------
 bool libEFA54406_gt_CreateinitialNeuroIntegrationbank_Func (bool testConds, bool runActions) {
-    // Variable Declarations
-    bool lv_trash;
-
     // Automatic Variable Declarations
-    // Variable Initialization
-
     // Actions
     if (!runActions) {
         return true;
@@ -284,9 +277,9 @@ void libEFA54406_gt_BlockCommands_Init () {
 }
 
 //--------------------------------------------------------------------------------------------------
-// Trigger: Unblock Commands
+// Trigger: Clear Queue
 //--------------------------------------------------------------------------------------------------
-bool libEFA54406_gt_UnblockCommands_Func (bool testConds, bool runActions) {
+bool libEFA54406_gt_ClearQueue_Func (bool testConds, bool runActions) {
     // Automatic Variable Declarations
     // Actions
     if (!runActions) {
@@ -299,15 +292,15 @@ bool libEFA54406_gt_UnblockCommands_Func (bool testConds, bool runActions) {
     libEFA54406_gv_bankwriteallowed = false;
     BankLoad("NeuroIntegration", 1);
     BankWait(BankLastCreated());
-    BankValueSetFromFlag(BankLastCreated(), "game_state", "is_blocking", false);
+    BankValueSetFromFlag(BankLastCreated(), "game_state", "clear_queue", true);
     BankSave(BankLastCreated());
     libEFA54406_gv_bankwriteallowed = true;
     return true;
 }
 
 //--------------------------------------------------------------------------------------------------
-void libEFA54406_gt_UnblockCommands_Init () {
-    libEFA54406_gt_UnblockCommands = TriggerCreate("libEFA54406_gt_UnblockCommands_Func");
+void libEFA54406_gt_ClearQueue_Init () {
+    libEFA54406_gt_ClearQueue = TriggerCreate("libEFA54406_gt_ClearQueue_Func");
 }
 
 void libEFA54406_InitTriggers () {
@@ -316,7 +309,7 @@ void libEFA54406_InitTriggers () {
     libEFA54406_gt_CreateinitialNeuroIntegrationbank_Init();
     libEFA54406_gt_CleanNeuroIntegrationbank_Init();
     libEFA54406_gt_BlockCommands_Init();
-    libEFA54406_gt_UnblockCommands_Init();
+    libEFA54406_gt_ClearQueue_Init();
 }
 
 //--------------------------------------------------------------------------------------------------

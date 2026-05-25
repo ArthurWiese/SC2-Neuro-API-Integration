@@ -14,6 +14,7 @@ void libEFA54406_gf_create_action_2_arg (string lp_action_name, bool lp_action_a
 void libEFA54406_gf_create_action_3_arg (string lp_action_name, bool lp_action_active, string lp_action_description, string lp_action_argument_1_type, string lp_action_argument_2_type, string lp_action_argument_3_type, int lp_action_uses);
 void libEFA54406_gf_create_force_action (string lp_action_names, string lp_state, string lp_query, bool lp_ephemeral_context, string lp_priority);
 void libEFA54406_gf_create_context (string lp_context_name, string lp_context, bool lp_silent);
+void libEFA54406_gf_UnblockCommands (bool lp_clear_queue);
 
 // Trigger Declarations
 trigger libEFA54406_gt_Playerchatmessage;
@@ -21,7 +22,7 @@ trigger libEFA54406_gt_DisableAchievementsCheats;
 trigger libEFA54406_gt_CreateinitialNeuroIntegrationbank;
 trigger libEFA54406_gt_CleanNeuroIntegrationbank;
 trigger libEFA54406_gt_BlockCommands;
-trigger libEFA54406_gt_UnblockCommands;
+trigger libEFA54406_gt_ClearQueue;
 
 // Library Initialization
 void libEFA54406_InitVariables ();

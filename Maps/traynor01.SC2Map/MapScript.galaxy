@@ -410,8 +410,8 @@ bool gt_Raynormaxhealth_Func (bool testConds, bool runActions) {
     gv_raynormaxhealthdecisionclose = DialogControlLastCreated();
     Wait(2.0, c_timeReal);
     libNtve_gf_CreateDialogItemLabel(gv_raynormaxhealthdecision, 400, 200, c_anchorTopLeft, 50, 150, StringExternal("Param/Value/AB3CD232"), ColorWithAlpha(0,0,0,0), false, 2.0);
+    Wait(6.0, c_timeReal);
     libEFA54406_gf_create_action_1_arg("decide_raynor_max_health", true, "Increases or reduces the max health of Raynor", "Bool", 1);
-    Wait(10.0, c_timeReal);
     libEFA54406_gf_create_force_action("decide_raynor_max_health", "This is the first mission of the campaign and Raynor, the leader of the revolutionary group \"Raynor's Raiders\",  tries to take over a Dominion outpost on Mar Sara to try to kickstart a revolution on the planet ", "Decide if you want to make this mission harder or easier for the player. Send True to increase Raynor's max health by 50 hit points and False to decrease his max health by 50 hit points", false, "low");
     return true;
 }
@@ -5032,7 +5032,7 @@ bool gt_IntroQ_Func (bool testConds, bool runActions) {
     TriggerExecute(gt_IntroSetup, true, true);
     TriggerExecute(gt_IntroCinematic, true, true);
     TriggerExecute(gt_IntroCinematicEnd, true, true);
-    TriggerExecute(libEFA54406_gt_UnblockCommands, true, true);
+    libEFA54406_gf_UnblockCommands(true);
     TriggerQueueExit();
     return true;
 }
@@ -5439,7 +5439,7 @@ bool gt_MidBillboardQ_Func (bool testConds, bool runActions) {
     TriggerExecute(gt_MidBillboardCinematicEnd, true, true);
     TriggerExecute(gt_MidBillboardCleanup, true, true);
     TriggerExecute(gt_ObjectiveDestroyDominionHoloboardsCreate, true, true);
-    TriggerExecute(libEFA54406_gt_UnblockCommands, true, true);
+    libEFA54406_gf_UnblockCommands(false);
     TriggerQueueExit();
     return true;
 }
@@ -5642,7 +5642,7 @@ bool gt_MidEscapeQ_Func (bool testConds, bool runActions) {
     TriggerExecute(gt_MidEscapeCinematic, true, true);
     TriggerExecute(gt_MidEscapeCinematicEnd, true, true);
     TriggerExecute(gt_MidEscapeCleanup, true, true);
-    TriggerExecute(libEFA54406_gt_UnblockCommands, true, true);
+    libEFA54406_gf_UnblockCommands(false);
     TriggerQueueExit();
     return true;
 }
