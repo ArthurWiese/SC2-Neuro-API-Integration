@@ -1,4 +1,4 @@
-# SC2 Neuro API Integration
+# SC2 Neuro API Integration - WIP
 An integration of the Neuro API for StarCraft 2
 
 In the [Mod](Mod) and [Maps](Maps) folders is a demo for the implementation of the Neuro API in the first Mission of the Wings of Liberty campaign
@@ -63,4 +63,4 @@ See documentation to learn how to mod StarCraft 2 to work with the Neuro API:
 
 Blizzard is a registered trademark of Blizzard Entertainment, Inc
 
-Wings of Liberty and StarCraft are a trademarks or registered trademark of Blizzard Entertainment, Inc., in the U.S. and/or other countries
+Wings of Liberty and StarCraft are registered trademarks of Blizzard Entertainment, Inc., in the U.S. and/or other countries
