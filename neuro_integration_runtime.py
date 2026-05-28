@@ -119,13 +119,10 @@ class NeuroIntegrationRuntimeMixin:
             await self._connect_neuro_websocket()
             await self._send_neuro_startup()
 
-            bank_file = await self._wait_for_integration_bank_file()
-            self._bank_file_path = bank_file
-            await self._process_initial_bank_state(bank_file)
+            self._bank_file_path = await self._wait_for_integration_bank_file()
+            # await self._process_initial_bank_state(bank_file)
 
             self._bank_monitor_task = asyncio.create_task(self._monitor_bank_changes(), name="bank-monitor")
-
-            self.print_line("Integration bootstrap complete.", 1)
 
             # Start SC2 process watchdog that will deactivate bank flags if SC2 exits
             if self._sc2_watchdog_task is None:
@@ -137,6 +134,8 @@ class NeuroIntegrationRuntimeMixin:
 
             if self._action_queue_worker_task is None:
                 self._action_queue_worker_task = asyncio.create_task(self._process_action_queue(), name="action-queue-worker")
+            
+            self.print_line("Integration bootstrap complete.", 1)
 
             while self._integration_stop_event is not None and not self._integration_stop_event.is_set():
                 if not self._neuro_connection_is_healthy():
@@ -253,19 +252,19 @@ class NeuroIntegrationRuntimeMixin:
                 last_reminder_time = current_time
             await asyncio.sleep(0.5)
 
-    async def _process_initial_bank_state(self, bank_file: Path) -> None:
-        bank_data = parse_bank_file(bank_file)
+    # async def _process_initial_bank_state(self, bank_file: Path) -> None:
+    #     bank_data = parse_bank_file(bank_file)
 
-        game_state = bank_data.get("game_state", {})
-        in_mission = game_state.get("in_mission", False)
-        self._in_mission = in_mission
+    #     game_state = bank_data.get("game_state", {})
+    #     in_mission = game_state.get("in_mission", False)
+    #     self._in_mission = in_mission
 
-        if not in_mission:
-            self._game_is_paused = False
-            await self._send_neuro_context("Currently in intermission")
-            return
-        else:
-            self._record_game_state_active_value(int(game_state.get("active", 0)))
+    #     if not in_mission:
+    #         self._game_is_paused = False
+    #         await self._send_neuro_context("Currently in intermission")
+    #         return
+    #     else:
+    #         self._record_game_state_active_value(int(game_state.get("active", 0)))
 
 
     async def _monitor_bank_changes(self) -> None:
@@ -535,10 +534,16 @@ class NeuroIntegrationRuntimeMixin:
 
         if missing_names:
             await self._send_neuro_unregister_actions(missing_names)
+            queue_actions_removed = [action for action in self._action_queue if action.get("name") in missing_names]
+            if queue_actions_removed:
+                summary = ""
+                for removed in queue_actions_removed:
+                    summary += self._format_action_command_for_context(removed)
+                self.print_line(f"Removing queued actions due to them being unregistered: {summary}", 2)
+                await self._send_neuro_context(f"Removing queued actions due to them being unregistered: {summary}")
+                self._action_queue = deque(action for action in self._action_queue if action.get("name") not in missing_names)
             for name in missing_names:
                 self._active_actions.pop(name, None)
-                # Remove any queued commands for the unregistered action
-                self._action_queue = deque(action for action in self._action_queue if action.get("name") != name)
 
         names_to_register = new_names + [name for name in changed_names if name not in new_names]
         if names_to_register:
