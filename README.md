@@ -1,5 +1,5 @@
 # SC2 Neuro API Integration - WIP
-An integration of the Neuro API for StarCraft 2
+An integration of the [Neuro API](https://github.com/VedalAI/neuro-sdk) for StarCraft 2
 
 In the [Mod](Mod) and [Maps](Maps) folders is a demo for the implementation of the Neuro API in the first Mission of the Wings of Liberty campaign
 
