@@ -747,7 +747,7 @@ class NeuroIntegrationRuntimeMixin:
         
         # For now Neuro can only process one action force at a time, so only send one and ignore the rest
         if len(force_groups) > 1:
-            self.print_line(f"Sending multiple force action groups at the same time. Sending {force_groups[0]} and ignoring the rest: {force_groups[1:]}", 0)
+            self.print_line(f"Receiving multiple force action groups at the same time. Sending {force_groups[0]} and ignoring the rest: {force_groups[1:]}", 0)
             force_groups = [force_groups[0]]
         
         if force_groups:
@@ -1058,6 +1058,7 @@ class NeuroIntegrationRuntimeMixin:
             self.print_line(f"Failed to write queued action request to bank file: {exc}", 0)
             await self._send_neuro_context(f"Queued action could not be executed: {self._format_action_command_for_context(action_command)}.")
         
+        # Allow new force action command
         if action_name in self._force_action_actions_to_use:
             self._force_action_actions_to_use = []
 
