@@ -144,9 +144,6 @@ class NeuroIntegrationRuntimeMixin:
                         await asyncio.sleep(2.0)
                         continue
 
-                if self._bank_monitor_task is None or self._bank_monitor_task.done():
-                    self._bank_monitor_task = asyncio.create_task(self._monitor_bank_changes(), name="bank-monitor")
-
                 await asyncio.sleep(0.25)
         except asyncio.CancelledError:
             raise
@@ -197,8 +194,7 @@ class NeuroIntegrationRuntimeMixin:
             try:
                 await self._connect_neuro_websocket()
                 await self._send_neuro_startup()
-                if self._bank_file_path is not None and self._bank_file_path.exists():
-                    await self._process_initial_bank_state(self._bank_file_path)
+                assert self._bank_file_path is not None and self._bank_file_path.exists()
                 self.print_line("Neuro websocket reconnected successfully.", 1)
                 return True
             except (aiohttp.ClientError, OSError, TimeoutError, RuntimeError, ValueError) as exc:
@@ -739,7 +735,7 @@ class NeuroIntegrationRuntimeMixin:
                 continue
 
             if any(action_name not in self._active_actions for action_name in action_names):
-                self.print_line(f"One or more action names in reveived force action are not in the list of active actions. \nActive actions: {sorted(self._active_actions)}. Force action actions: {action_names}", 0)
+                self.print_line(f"One or more action names in received force action are not in the list of active actions. \nActive actions: {sorted(self._active_actions)}. Force action actions: {action_names}", 0)
                 await self._run_serialized_bank_write(lambda: clear_force_action_section(self._bank_file_path))
                 continue
 
@@ -747,7 +743,7 @@ class NeuroIntegrationRuntimeMixin:
         
         # For now Neuro can only process one action force at a time, so only send one and ignore the rest
         if len(force_groups) > 1:
-            self.print_line(f"Receiving multiple force action groups at the same time. Sending {force_groups[0]} and ignoring the rest: {force_groups[1:]}", 0)
+            self.print_line(f"Received multiple force action groups at the same time. Sending {force_groups[0]} and ignoring the rest: {force_groups[1:]}", 0)
             force_groups = [force_groups[0]]
         
         if force_groups:
