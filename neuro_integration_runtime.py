@@ -55,6 +55,7 @@ class NeuroIntegrationRuntimeMixin:
         self._action_queue: deque[dict[str, Any]] = deque()
         self._action_queue_condition: asyncio.Condition = asyncio.Condition()
         self._active_actions: dict[str, dict[str, Any]] = {}
+        self._force_action_actions_to_use: list[str] = []
         self._last_parsed_bank_data: dict[str, dict[str, Any]] = {}
         self._bank_write_lock: asyncio.Lock | None = None
         self._bank_update_in_progress: bool = False
@@ -120,7 +121,6 @@ class NeuroIntegrationRuntimeMixin:
             await self._send_neuro_startup()
 
             self._bank_file_path = await self._wait_for_integration_bank_file()
-            # await self._process_initial_bank_state(bank_file)
 
             self._bank_monitor_task = asyncio.create_task(self._monitor_bank_changes(), name="bank-monitor")
 
@@ -251,21 +251,6 @@ class NeuroIntegrationRuntimeMixin:
                 self.print_line(f"Waiting for bank file at {bank_file}", 1)
                 last_reminder_time = current_time
             await asyncio.sleep(0.5)
-
-    # async def _process_initial_bank_state(self, bank_file: Path) -> None:
-    #     bank_data = parse_bank_file(bank_file)
-
-    #     game_state = bank_data.get("game_state", {})
-    #     in_mission = game_state.get("in_mission", False)
-    #     self._in_mission = in_mission
-
-    #     if not in_mission:
-    #         self._game_is_paused = False
-    #         await self._send_neuro_context("Currently in intermission")
-    #         return
-    #     else:
-    #         self._record_game_state_active_value(int(game_state.get("active", 0)))
-
 
     async def _monitor_bank_changes(self) -> None:
         if self.banks_path is None or self._bank_file_path is None:
@@ -403,10 +388,6 @@ class NeuroIntegrationRuntimeMixin:
             await self._send_neuro_context("Entered intermission; game cannot process commands until the next mission starts.")
             await asyncio.sleep(2)
             await self._cleanup_bank_file()
-            # await self._run_serialized_bank_write(lambda: deactivate_everything(self._bank_file_path))
-            # await self._handle_bank_file_updated()
-            # self._action_queue.clear()
-            # self.print_line("Entered intermission; deactivated all bank flags.", 2)
             return
         elif not self._in_mission and new_in_mission:
             self._in_mission = True
@@ -753,32 +734,47 @@ class NeuroIntegrationRuntimeMixin:
 
             priority = priority_value.strip().lower()
             if priority not in {"low", "medium", "high", "critical"}:
+                self.print_line(f"Invalid priority in received force action {group_key}: {priority}", 0)
+                await self._run_serialized_bank_write(lambda: clear_force_action_section(self._bank_file_path))
                 continue
 
             if any(action_name not in self._active_actions for action_name in action_names):
+                self.print_line(f"One or more action names in reveived force action are not in the list of active actions. \nActive actions: {sorted(self._active_actions)}. Force action actions: {action_names}", 0)
+                await self._run_serialized_bank_write(lambda: clear_force_action_section(self._bank_file_path))
                 continue
 
             force_groups.append((action_names, query_value, state_value, ephemeral_value, priority))
+        
+        # For now Neuro can only process one action force at a time, so only send one and ignore the rest
+        if len(force_groups) > 1:
+            self.print_line(f"Sending multiple force action groups at the same time. Sending {force_groups[0]} and ignoring the rest: {force_groups[1:]}", 0)
+            force_groups = [force_groups[0]]
+        
+        if force_groups:
+            if self._force_action_actions_to_use:
+                self.print_line(f"New force action command received but previous one has not been used. Ignoring this force action command: {force_groups}", 0)
+                return
+            self._force_action_actions_to_use = force_groups[0][0]
 
-        try:
-            for action_names, query_value, state_value, ephemeral_value, priority in force_groups:
-                try:
-                    await self._send_neuro_force_actions(
-                        query=query_value,
-                        action_names=action_names,
-                        state=state_value,
-                        ephemeral_context=ephemeral_value,
-                        priority=priority,
-                    )
-                    any_sent = True
-                except Exception as exc:
-                    self.print_line(f"Failed to send force actions for {json.dumps(action_names)}: {exc}", 0)
-        finally:
-            if any_sent and self._bank_file_path is not None:
-                try:
-                    await self._run_serialized_bank_write(lambda: clear_force_action_section(self._bank_file_path))
-                except Exception as exc:
-                    self.print_line(f"Failed to clear force_action section in bank file: {exc}", 0)
+            try:
+                for action_names, query_value, state_value, ephemeral_value, priority in force_groups:
+                    try:
+                        await self._send_neuro_force_actions(
+                            query=query_value,
+                            action_names=action_names,
+                            state=state_value,
+                            ephemeral_context=ephemeral_value,
+                            priority=priority,
+                        )
+                        any_sent = True
+                    except Exception as exc:
+                        self.print_line(f"Failed to send force actions for {json.dumps(action_names)}: {exc}", 0)
+            finally:
+                if any_sent and self._bank_file_path is not None:
+                    try:
+                        await self._run_serialized_bank_write(lambda: clear_force_action_section(self._bank_file_path))
+                    except Exception as exc:
+                        self.print_line(f"Failed to clear force_action section in bank file: {exc}", 0)
 
     def _parse_force_action_group_names(self, group_key: str) -> list[str]:
         action_names: list[str] = []
@@ -884,7 +880,7 @@ class NeuroIntegrationRuntimeMixin:
             arguments = raw_data
         elif isinstance(raw_data, str):
             stripped = raw_data.strip()
-            if stripped == "":
+            if stripped == "" or stripped.lower() == "null":
                 if schema:
                     return ValueError("missing action arguments")
                 return None
@@ -1034,7 +1030,7 @@ class NeuroIntegrationRuntimeMixin:
 
         if self._bank_file_path is None:
             self.print_line("Queued action could not be executed because the bank file path is not available.", 0)
-            await self._send_neuro_action_result(action_id, False, "Bank file path is not available.")
+            await self._send_neuro_context(f"Queued action could not be executed: {self._format_action_command_for_context(action_command)}.")
             return
 
         updates: dict[str, dict[str, Any]] = {"do_action": {action_name: True}}
@@ -1045,7 +1041,7 @@ class NeuroIntegrationRuntimeMixin:
         action_definition = self._active_actions.get(action_name)
         if not isinstance(action_definition, dict):
             self.print_line(f"Queued action '{action_name}' could not be executed because it is no longer active.", 0)
-            await self._send_neuro_action_result(action_id, False, f"Action '{action_name}' is no longer active.")
+            await self._send_neuro_context(f"Queued action could not be executed: {self._format_action_command_for_context(action_command)}.")
             return
 
         current_uses = int(action_definition.get("uses"))
@@ -1060,7 +1056,10 @@ class NeuroIntegrationRuntimeMixin:
             await self._run_serialized_bank_write(lambda: write_bank_values(self._bank_file_path, updates))
         except (OSError, ET.ParseError, RuntimeError, ValueError) as exc:
             self.print_line(f"Failed to write queued action request to bank file: {exc}", 0)
-            await self._send_neuro_action_result(action_id, False, f"Failed to execute action '{action_name}': {exc}")
+            await self._send_neuro_context(f"Queued action could not be executed: {self._format_action_command_for_context(action_command)}.")
+        
+        if action_name in self._force_action_actions_to_use:
+            self._force_action_actions_to_use = []
 
     def _is_sc2_running_sync(self) -> bool:
         try:
@@ -1174,6 +1173,7 @@ class NeuroIntegrationRuntimeMixin:
             await self._unregister_all_active_actions()
         except Exception as exc:
             self.print_line(f"Failed to unregister active actions after empty bank data: {exc}", 0)
+        self._force_action_actions_to_use = []
         self._action_queue.clear()
         await self._notify_action_queue_state_changed()
 
@@ -1232,3 +1232,4 @@ class NeuroIntegrationRuntimeMixin:
         self._game_state_active_last_changed_time = None
         self._game_state_active_timeout_handled_value = None
         self._last_parsed_bank_data = {}
+        self._force_action_actions_to_use = []
