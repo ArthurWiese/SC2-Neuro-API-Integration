@@ -1018,6 +1018,10 @@ class NeuroIntegrationRuntimeMixin:
 
         return None
 
+    async def _notify_action_queue_state_changed(self) -> None:
+        async with self._action_queue_condition:
+            self._action_queue_condition.notify_all()
+
     async def _process_action_queue(self) -> None:
         try:
             while self._integration_stop_event is not None and not self._integration_stop_event.is_set():
@@ -1178,10 +1182,6 @@ class NeuroIntegrationRuntimeMixin:
         self._game_state_active_value = None
         self._game_state_active_last_changed_time = None
         self._game_state_active_timeout_handled_value = None
-
-    async def _notify_action_queue_state_changed(self) -> None:
-        async with self._action_queue_condition:
-            self._action_queue_condition.notify_all()
 
     async def _monitor_game_state_active_timeout(self) -> None:
         while self._integration_stop_event is not None and not self._integration_stop_event.is_set():
