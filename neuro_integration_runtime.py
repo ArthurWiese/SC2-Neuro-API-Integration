@@ -16,7 +16,6 @@ import psutil
 from bank_file_io import (
     BankFileEventHandler,
     clear_force_action_section,
-    deactivate_everything,
     parse_bank_file,
     write_bank_values,
     clear_game_context_flags,
@@ -195,7 +194,6 @@ class NeuroIntegrationRuntimeMixin:
             try:
                 await self._connect_neuro_websocket()
                 await self._send_neuro_startup()
-                assert self._bank_file_path is not None and self._bank_file_path.exists()
                 self.print_line("Neuro websocket reconnected successfully.", 1)
                 return True
             except (aiohttp.ClientError, OSError, TimeoutError, RuntimeError, ValueError) as exc:
