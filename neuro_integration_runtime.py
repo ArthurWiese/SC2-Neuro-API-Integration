@@ -616,7 +616,7 @@ class NeuroIntegrationRuntimeMixin:
         type_raw = expected_type.strip()
         normalised = type_raw.lower()
 
-        range_match = re.fullmatch(r"(integer|int|float|fixed|number|decimal)\((.+?)\,(.+?)\)", type_raw, re.IGNORECASE)
+        range_match = re.fullmatch(r"(integer|int|float|fixed|number|decimal|real)\((.+?)\,(.+?)\)", type_raw, re.IGNORECASE)
         if range_match is not None:
             type_name = range_match.group(1)
             lower_raw = range_match.group(2).strip()
