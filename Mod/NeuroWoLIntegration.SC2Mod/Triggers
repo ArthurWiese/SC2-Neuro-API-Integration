@@ -10,7 +10,6 @@
             <Item Type="Trigger" Library="EFA54406" Id="2A091DF1"/>
             <Item Type="FunctionDef" Library="EFA54406" Id="B874705E"/>
             <Item Type="Trigger" Library="EFA54406" Id="30F36873"/>
-            <Item Type="Variable" Library="EFA54406" Id="9A0665C5"/>
             <Item Type="Variable" Library="EFA54406" Id="4AA9B1F8"/>
         </Root>
         <Element Type="Category" Id="44B7A488">
@@ -2108,9 +2107,6 @@
         </Element>
         <Element Type="Trigger" Id="E2A8EDDA">
             <Event Type="FunctionCall" Library="EFA54406" Id="5801CA59"/>
-            <Action Type="FunctionCall" Library="EFA54406" Id="18ED300B"/>
-            <Action Type="FunctionCall" Library="EFA54406" Id="77A95ADB"/>
-            <Action Type="FunctionCall" Library="EFA54406" Id="98AE81E1"/>
             <Action Type="FunctionCall" Library="EFA54406" Id="76863AFD"/>
             <Action Type="FunctionCall" Library="EFA54406" Id="FE30D285"/>
             <Action Type="FunctionCall" Library="EFA54406" Id="7295D83E"/>
@@ -2133,68 +2129,6 @@
         </Element>
         <Element Type="FunctionCall" Id="5801CA59">
             <FunctionDef Type="FunctionDef" Library="Ntve" Id="00000120"/>
-        </Element>
-        <Element Type="FunctionCall" Id="18ED300B">
-            <FunctionDef Type="FunctionDef" Library="Ntve" Id="00000292"/>
-            <Parameter Type="Param" Library="EFA54406" Id="DDB1EAB5"/>
-            <Parameter Type="Param" Library="EFA54406" Id="B5F78A43"/>
-        </Element>
-        <Element Type="Param" Id="DDB1EAB5">
-            <ParameterDef Type="ParamDef" Library="Ntve" Id="00000499"/>
-            <Value>1</Value>
-            <ValueType Type="int"/>
-        </Element>
-        <Element Type="Param" Id="B5F78A43">
-            <ParameterDef Type="ParamDef" Library="Ntve" Id="00000498"/>
-            <Value>&quot;TCampaign&quot;</Value>
-            <ValueType Type="string"/>
-        </Element>
-        <Element Type="FunctionCall" Id="77A95ADB">
-            <FunctionDef Type="FunctionDef" Library="Ntve" Id="17616294"/>
-            <Parameter Type="Param" Library="EFA54406" Id="8CC562C4"/>
-        </Element>
-        <Element Type="Param" Id="8CC562C4">
-            <ParameterDef Type="ParamDef" Library="Ntve" Id="B6956915"/>
-            <FunctionCall Type="FunctionCall" Library="EFA54406" Id="36812AA9"/>
-        </Element>
-        <Element Type="FunctionCall" Id="36812AA9">
-            <FunctionDef Type="FunctionDef" Library="Ntve" Id="00000279"/>
-        </Element>
-        <Element Type="FunctionCall" Id="98AE81E1">
-            <FunctionDef Type="FunctionDef" Library="Ntve" Id="00000136"/>
-            <Parameter Type="Param" Library="EFA54406" Id="1B8127D1"/>
-            <Parameter Type="Param" Library="EFA54406" Id="5C321712"/>
-        </Element>
-        <Element Type="Param" Id="1B8127D1">
-            <ParameterDef Type="ParamDef" Library="Ntve" Id="00000219"/>
-            <Variable Type="Variable" Library="EFA54406" Id="9A0665C5"/>
-        </Element>
-        <Element Type="Param" Id="5C321712">
-            <ParameterDef Type="ParamDef" Library="Ntve" Id="00000220"/>
-            <FunctionCall Type="FunctionCall" Library="EFA54406" Id="F86797B9"/>
-        </Element>
-        <Element Type="FunctionCall" Id="F86797B9">
-            <FunctionDef Type="FunctionDef" Library="Ntve" Id="00000305"/>
-            <Parameter Type="Param" Library="EFA54406" Id="3ABA1D5D"/>
-            <Parameter Type="Param" Library="EFA54406" Id="376CB79B"/>
-            <Parameter Type="Param" Library="EFA54406" Id="D9610DBE"/>
-        </Element>
-        <Element Type="Param" Id="3ABA1D5D">
-            <ParameterDef Type="ParamDef" Library="Ntve" Id="00000532"/>
-            <FunctionCall Type="FunctionCall" Library="EFA54406" Id="1A4EDDE0"/>
-        </Element>
-        <Element Type="FunctionCall" Id="1A4EDDE0">
-            <FunctionDef Type="FunctionDef" Library="Ntve" Id="00000279"/>
-        </Element>
-        <Element Type="Param" Id="376CB79B">
-            <ParameterDef Type="ParamDef" Library="Ntve" Id="00000533"/>
-            <Value>MissionCompletedAge</Value>
-            <ValueType Type="string"/>
-        </Element>
-        <Element Type="Param" Id="D9610DBE">
-            <ParameterDef Type="ParamDef" Library="Ntve" Id="00000534"/>
-            <Value>&quot;1&quot;</Value>
-            <ValueType Type="string"/>
         </Element>
         <Element Type="FunctionCall" Id="76863AFD">
             <FunctionDef Type="FunctionDef" Library="Ntve" Id="00000292"/>
@@ -3072,16 +3006,6 @@
             <ParameterDef Type="ParamDef" Library="Ntve" Id="00000220"/>
             <Value>true</Value>
             <ValueType Type="bool"/>
-        </Element>
-        <Element Type="Variable" Id="9A0665C5">
-            <VariableType>
-                <Type Value="int"/>
-            </VariableType>
-            <Value Type="Param" Library="EFA54406" Id="1EFA6325"/>
-        </Element>
-        <Element Type="Param" Id="1EFA6325">
-            <Value>0</Value>
-            <ValueType Type="int"/>
         </Element>
         <Element Type="Variable" Id="4AA9B1F8">
             <VariableType>

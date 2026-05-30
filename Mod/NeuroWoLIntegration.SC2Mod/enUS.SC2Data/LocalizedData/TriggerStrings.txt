@@ -46,4 +46,3 @@ Trigger/Name/lib_EFA54406_AFE49114=Player chat message
 Trigger/Name/lib_EFA54406_D78CAD40=Clean NeuroIntegration bank
 Trigger/Name/lib_EFA54406_E2A8EDDA=Create initial NeuroIntegration bank
 Variable/Name/lib_EFA54406_4AA9B1F8=Bank write allowed
-Variable/Name/lib_EFA54406_9A0665C5=Missions beaten

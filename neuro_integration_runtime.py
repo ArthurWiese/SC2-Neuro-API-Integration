@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from collections import deque
 import json
+import re
 from pathlib import Path
 from watchdog.observers import Observer
 from typing import Any, Callable, TYPE_CHECKING
@@ -533,6 +534,7 @@ class NeuroIntegrationRuntimeMixin:
             self._active_actions[name] = latest_actions[name]
 
     def _extract_actions(self, possible_actions: dict[str, Any]) -> list[dict[str, Any]]:
+        # Rechecks actions every bank update which is not efficient and can lead to spamming of error messages in integration terminal
         action_names: set[str] = set()
         for key in possible_actions:
             if key.endswith("_active"):
@@ -611,21 +613,48 @@ class NeuroIntegrationRuntimeMixin:
         }
 
     def _json_schema_for_bank_type(self, expected_type: str) -> dict[str, Any]:
-        normalized = expected_type.strip().lower()
+        type_raw = expected_type.strip()
+        normalised = type_raw.lower()
 
-        if normalized in {"string", "str", "text"}:
+        range_match = re.fullmatch(r"(integer|int|float|fixed|number|decimal)\((.+?)\,(.+?)\)", type_raw, re.IGNORECASE)
+        if range_match is not None:
+            type_name = range_match.group(1)
+            lower_raw = range_match.group(2).strip()
+            upper_raw = range_match.group(3).strip()
+            schema_type = "integer" if type_name.lower() in {"integer", "int"} else "number"
+
+            schema: dict[str, Any] = {"type": schema_type}
+            if lower_raw:
+                schema["minimum"] = int(lower_raw) if schema_type == "integer" else float(lower_raw)
+            if upper_raw:
+                schema["maximum"] = int(upper_raw) if schema_type == "integer" else float(upper_raw)
+            if not lower_raw or not upper_raw:
+                self.print_line(f"No lower or upper bound specified for ranged type in action argument expected type: {expected_type!r}. Range constraints will be ignored.", 0)
+            return schema
+
+        enum_match = re.fullmatch(r"string\((.+?)\)", type_raw, re.IGNORECASE)
+        if enum_match is not None:
+            options = [option.strip() for option in enum_match.group(1).split(",") if option.strip()]
+            if options:
+                return {"type": "string", "enum": options}
+            else:
+                self.print_line(f"No valid options specified for enum type in action argument expected type: {expected_type!r}. Enum constraints will be ignored.", 0)
+                return {"type": "string"}
+
+        pattern_match = re.fullmatch(r"string(?:/pattern|/regex)=(.+)", type_raw, re.IGNORECASE)
+        if pattern_match is not None:
+            return {"type": "string", "pattern": pattern_match.group(1).strip()}
+
+        if normalised in {"string", "str", "text"}:
             return {"type": "string"}
-        if normalized in {"int", "integer"}:
+        if normalised in {"int", "integer"}:
             return {"type": "integer"}
-        if normalized in {"float", "fixed", "number", "decimal"}:
+        if normalised in {"float", "fixed", "number", "decimal", "real"}:
             return {"type": "number"}
-        if normalized in {"bool", "boolean", "flag"}:
+        if normalised in {"bool", "boolean", "flag"}:
             return {"type": "boolean"}
-        if normalized == "array":
-            return {"type": "array"}
-        if normalized == "object":
-            return {"type": "object"}
-
+        
+        self.print_line(f"Unrecognised expected type for action argument: {expected_type!r}. Defaulting to string.", 0)
         return {"type": "string"}
     
     async def _send_neuro_startup(self) -> None:
@@ -936,21 +965,58 @@ class NeuroIntegrationRuntimeMixin:
         if expected_type == "string":
             if not isinstance(value, str):
                 return ValueError(f"argument '{property_name}' must be a string")
+            # enum constraint for strings
+            enum_values = schema.get("enum")
+            if enum_values is not None:
+                if not isinstance(enum_values, (list, tuple)) or not all(isinstance(x, str) for x in enum_values):
+                    return ValueError(f"invalid enum schema for '{property_name}'")
+                if value not in enum_values:
+                    return ValueError(f"argument '{property_name}' must be one of: {', '.join(enum_values)}")
+            # pattern/regex constraint for strings
+            pattern = schema.get("pattern")
+            if pattern is not None:
+                try:
+                    compiled = re.compile(pattern)
+                except re.error:
+                    self.print_line(f"Invalid regex pattern in schema for '{property_name}': {pattern!r}", 0)
+                    return ValueError(f"invalid schema pattern for '{property_name}'")
+                if not compiled.fullmatch(value):
+                    return ValueError(f"argument '{property_name}' must match pattern: {pattern}")
         elif expected_type == "integer":
             if not isinstance(value, int) or isinstance(value, bool):
                 return ValueError(f"argument '{property_name}' must be an integer")
+            # enforce numeric bounds if provided
+            if "minimum" in schema:
+                try:
+                    if value < int(schema["minimum"]):
+                        return ValueError(f"argument '{property_name}' must be >= {schema['minimum']}")
+                except Exception:
+                    return ValueError(f"invalid minimum in schema for '{property_name}'")
+            if "maximum" in schema:
+                try:
+                    if value > int(schema["maximum"]):
+                        return ValueError(f"argument '{property_name}' must be <= {schema['maximum']}")
+                except Exception:
+                    return ValueError(f"invalid maximum in schema for '{property_name}'")
         elif expected_type == "number":
             if not isinstance(value, (int, float)) or isinstance(value, bool):
                 return ValueError(f"argument '{property_name}' must be a number")
+            # enforce numeric bounds if provided
+            if "minimum" in schema:
+                try:
+                    if float(value) < float(schema["minimum"]):
+                        return ValueError(f"argument '{property_name}' must be >= {schema['minimum']}")
+                except Exception:
+                    return ValueError(f"invalid minimum in schema for '{property_name}'")
+            if "maximum" in schema:
+                try:
+                    if float(value) > float(schema["maximum"]):
+                        return ValueError(f"argument '{property_name}' must be <= {schema['maximum']}")
+                except Exception:
+                    return ValueError(f"invalid maximum in schema for '{property_name}'")
         elif expected_type == "boolean":
             if not isinstance(value, bool):
                 return ValueError(f"argument '{property_name}' must be a boolean")
-        elif expected_type == "array":
-            if not isinstance(value, list):
-                return ValueError(f"argument '{property_name}' must be an array")
-        elif expected_type == "object":
-            if not isinstance(value, dict):
-                return ValueError(f"argument '{property_name}' must be an object")
 
         return None
 

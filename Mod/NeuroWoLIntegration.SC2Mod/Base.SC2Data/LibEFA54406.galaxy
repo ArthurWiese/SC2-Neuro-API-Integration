@@ -198,9 +198,6 @@ bool libEFA54406_gt_CreateinitialNeuroIntegrationbank_Func (bool testConds, bool
         return true;
     }
 
-    BankLoad("\"TCampaign\"", 1);
-    BankWait(BankLastCreated());
-    libEFA54406_gv_missionsbeaten = BankValueGetAsInt(BankLastCreated(), "MissionCompletedAge", "\"1\"");
     BankLoad("NeuroIntegration", 1);
     BankWait(BankLastCreated());
     BankValueSetFromFlag(BankLastCreated(), "game_state", "in_mission", false);

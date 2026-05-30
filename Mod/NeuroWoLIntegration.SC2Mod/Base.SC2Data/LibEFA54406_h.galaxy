@@ -4,7 +4,6 @@ include "TriggerLibs/natives"
 // Library: NeuroLib
 //--------------------------------------------------------------------------------------------------
 // Variable Declarations
-int libEFA54406_gv_missionsbeaten;
 bool libEFA54406_gv_bankwriteallowed;
 
 // Function Declarations
