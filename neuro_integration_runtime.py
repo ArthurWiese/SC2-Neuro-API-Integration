@@ -1147,8 +1147,6 @@ class NeuroIntegrationRuntimeMixin:
                     else:
                         if not deactivated_for_current_outage and self._bank_file_path is not None and self._bank_file_path.exists():
                             try:
-                                # await self._run_serialized_bank_write(lambda: deactivate_everything(self._bank_file_path))
-                                # self._action_queue.clear()
                                 deactivated_for_current_outage = True
                                 self.print_line('SC2 not running — clearing bank file.', 2)
                                 await self._cleanup_bank_file()
