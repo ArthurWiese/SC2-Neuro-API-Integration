@@ -1126,6 +1126,7 @@ class NeuroIntegrationRuntimeMixin:
         except (OSError, ET.ParseError, RuntimeError, ValueError) as exc:
             self.print_line(f"Failed to write queued action request to bank file: {exc}", 0)
             await self._send_neuro_context(f"Queued action could not be executed: {self._format_action_command_for_context(action_command)}.")
+            return
         
         # Allow new force action command
         if action_name in self._force_action_actions_to_use:
