@@ -146,6 +146,6 @@ When the game is paused this loop will get frozen which leads to the "active" va
 </details>
 
 ## Some notes
-- Despite all efforts there might still be rare cases where the bank file is not in a state that it should be in. Restarting the mission should reset everything
+- Despite all efforts there might still be rare cases where the bank file is not in a state that it should be in, leading to unintended behaviour. Restarting the mission should reset everything
 - A force action command will not be able to be executed if the game is saved and loaded after the start of a force action and before Neuro sends the corresponding action back
 - When the game launches it will load the state of the NeuroIntegration bank file before it was shutdown, leading to the possibility that "in_mission" is true and actions being active while not in a mission. Because the "active" value does not get updated, the integration will recognise the mission as being paused. Neuro can send actions to a queue but they will never be actually executed. There is no way for the integration to differentiate between being paused in the menu screen or during a mission
