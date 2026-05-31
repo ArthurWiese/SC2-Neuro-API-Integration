@@ -62,7 +62,7 @@ This template is used to create a context command for Neuro.
 <details>
 <summary>Triggers in .SC2Mod file</summary>
 
-### Create NeuroIntegration bank
+### Create NeuroIntegration Bank
 <img src="CreateNeuroIntegrationBank.jpg">
 
 Cleans up and initialises the bank file at the start of a mission.
@@ -110,22 +110,42 @@ Everytime a player sends a message into chat, send a context command to Neuro.
 
 </details>
 
+## Structure of the .SC2Map files
+All map-specific actions, force actions and contexts should be defined and handled in their respective .SC2Map file.
 
+All .SC2Map files contain three important triggers:
+- Event triggers that initialise and end the mission
+- The execution loop where changes to the bank file are processed
 
+<details>
+<summary>Triggers in .SC2Map files</summary>
 
+### Init Map
+<img src="InitMap.jpg">
 
+Initialises the map when the mission starts or when it is loaded
 
-# Ideas for the future
-- Just delete the bank file when in_mission == False instead of setting everything to False to reset (?, Permanent choices in another file)
-- Implement a trigger that clears the action command queue. For example after unblocking to remove unwanted commands in the queue.
+### Clean Up
+<img src="CleanUp.jpg">
 
+Player 1 leaves everytime when the mission ends in some form.
 
+Cleans the bank file. This sometimes doesn't work as intended, see [CleanNeuroIntegrationBank](#Clean-NeuroIntegration-Bank).
 
+### Execute Actions
+<img src="ExecuteActions.jpg">
 
+Periodically checks the "do_action" section for things to do. For every defined action for Neuro there must be a section in here to deal with the received commands from Neuro. For example like the chat_message action defined [here](#Create-NeuroIntegration-Bank).
 
+Updates the "active" value, this is the signal for the integration that the game is not paused and also opens the write window for the integration to the bank file.
 
+Finally open a window to let the game write to the bank file before repeating.
 
+When the game is paused this loop will get frozen which leads to the "active" value not being updated and the integration noticing that the game is paused.
 
+</details>
 
-
-
+## Some notes
+- Despite all efforts there might still be rare cases where the bank file is not in a state that it should be in. Restarting the mission should reset everything
+- A force action command will not be able to be executed if the game is saved and loaded after the start of a force action and before Neuro sends the corresponding action back
+- When the game launches it will load the state of the NeuroIntegration bank file before it was shutdown, leading to the possibility that "in_mission" is true and actions being active while not in a mission. Because the "active" value does not get updated, the integration will recognise the mission as being paused. Neuro can send actions to a queue but they will never be actually executed. There is no way for the integration to differentiate between being paused in the menu screen or during a mission
