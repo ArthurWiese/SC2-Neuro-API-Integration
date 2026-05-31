@@ -47,6 +47,7 @@ class NeuroIntegrationRuntimeMixin:
         self._bank_watcher_observer: Any | None = None
         self._bank_change_queue: asyncio.Queue[str] | None = None
         self._bank_natural_event_counter: int = 0
+        self._last_parsed_bank_data: dict[str, dict[str, Any]] = {}
         self._in_mission: bool | None = None
         self._game_is_paused: bool = False
         self._game_is_blocking: bool = False
@@ -54,14 +55,13 @@ class NeuroIntegrationRuntimeMixin:
         self._last_game_state_active_value: int = 0
         self._game_state_active_last_changed_time: float | None = None
         self._game_state_active_timeout_handled_value: int | None = None
+        self._force_action_actions_to_use: list[str] = []
+        self._active_actions: dict[str, dict[str, Any]] = {}
         self._action_queue: deque[dict[str, Any]] = deque()
         self._action_queue_condition: asyncio.Condition = asyncio.Condition()
-        self._active_actions: dict[str, dict[str, Any]] = {}
-        self._force_action_actions_to_use: list[str] = []
-        self._last_parsed_bank_data: dict[str, dict[str, Any]] = {}
+        self._action_queue_blocked_until: float = 0.0
         self._bank_write_lock: asyncio.Lock | None = None
         self._bank_update_in_progress: bool = False
-        self._action_queue_blocked_until: float = 0.0
 
 
     def _set_neuro_url(self, url_str: str) -> list[str]:
@@ -337,8 +337,7 @@ class NeuroIntegrationRuntimeMixin:
         if self._bank_file_path is None or not self._bank_file_path.exists():
             self._clear_game_state_active_watchdog_state()
             self._game_is_paused = False
-            self._action_queue.clear()
-            await self._notify_action_queue_state_changed()
+            await self._cleanup_communication()
             return
 
         try:
@@ -347,8 +346,7 @@ class NeuroIntegrationRuntimeMixin:
             self.print_line("Bank file was deleted; clearing active actions and action queue.", 0)
             self._clear_game_state_active_watchdog_state()
             self._game_is_paused = False
-            self._action_queue.clear()
-            await self._notify_action_queue_state_changed()
+            await self._cleanup_communication()
             return
         except ET.ParseError:
             self.print_line("Bank parse failed on file change; retrying on the next change event.", 0)
@@ -362,10 +360,7 @@ class NeuroIntegrationRuntimeMixin:
             # Game probably entered intermission if the bank file is empty or incomplete
             if self._in_mission:
                 self._in_mission = False
-                await self._unregister_all_active_actions()
-                self._force_action_actions_to_use = []
-                self._action_queue.clear()
-                await self._notify_action_queue_state_changed()
+                await self._cleanup_communication()
                 await self._send_neuro_context("Entered intermission; game cannot process commands until the next mission starts.")
             return
 
@@ -387,10 +382,7 @@ class NeuroIntegrationRuntimeMixin:
         else:
             self._clear_game_state_active_watchdog_state()
             self._game_is_paused = False
-            self._force_action_actions_to_use = []
-            await self._unregister_all_active_actions()
-            self._action_queue.clear()
-            await self._notify_action_queue_state_changed()
+            await self._cleanup_communication()
 
         if self._in_mission and not new_in_mission or self._in_mission is None and not new_in_mission:
             self._in_mission = False
@@ -1236,6 +1228,12 @@ class NeuroIntegrationRuntimeMixin:
 
         async with self._bank_write_lock:
             write_operation()
+    
+    async def _cleanup_communication(self) -> None:
+        await self._unregister_all_active_actions()
+        self._force_action_actions_to_use = []
+        self._action_queue.clear()
+        await self._notify_action_queue_state_changed()
 
     async def _cleanup_bank_file(self) -> None:
         if self._bank_file_path is not None:
@@ -1244,13 +1242,7 @@ class NeuroIntegrationRuntimeMixin:
                 self.print_line("Deleted bank file.", 2)
             except OSError as exc:
                 self.print_line(f"Failed to delete empty/incomplete bank file: {exc}", 0)
-        try:
-            await self._unregister_all_active_actions()
-        except Exception as exc:
-            self.print_line(f"Failed to unregister active actions after empty bank data: {exc}", 0)
-        self._force_action_actions_to_use = []
-        self._action_queue.clear()
-        await self._notify_action_queue_state_changed()
+        await self._cleanup_communication()
 
     async def _cleanup_integration_runtime(self) -> None:
         if self._bank_monitor_task is not None:
