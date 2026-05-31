@@ -5,7 +5,7 @@ In the [Mod](Mod) and [Maps](Maps) folders is a demo for the implementation of t
 
 Tested with [Gary](https://github.com/Govorunb/gary)
 
-Please report any issues and give feedback in the [Neuro-sama Discord]() under projects/SC2 Neuro WoL Integration
+Please report any issues and give feedback in the [Neuro-sama Discord]() under projects/SC2 Neuro WoL Integration or DM me
 
 ## What I want to use this integration for
 My goal is to create a custom Wings of Liberty campaign experience where Neuro gets context, triggers effects in the game and selects, gains and uses permanent abilities over the course of the campaign
@@ -44,7 +44,6 @@ start
 
 Note: For custom text to be displayed correctly you need to have your game language switched to English
 
-
 Note: You can launch StarCraft 2 listening to the SC2API after setting the StarCraft 2 installation folder and giving the "launch" command.
 You can then currently only send Ping messages to the game. 
 This method of communicating with the game turned out to be a dead end for creating a custom campaign but maybe interesting for letting Neuro play the game herself
@@ -61,6 +60,4 @@ See documentation to learn how to mod StarCraft 2 to work with the Neuro API:
 - This repo contains code form the StarCraft II API Client for Python 3 by BurnySc2. See [License](License%20%28python-sc2%29.txt). See [Repo](https://github.com/BurnySc2/python-sc2)
 - Otherwise [License](LICENSE) applies
 
-Blizzard is a registered trademark of Blizzard Entertainment, Inc
-
-Wings of Liberty and StarCraft are registered trademarks of Blizzard Entertainment, Inc., in the U.S. and/or other countries
+Blizzard, Wings of Liberty and StarCraft are registered trademarks of Blizzard Entertainment, Inc., in the U.S. and/or other countries
