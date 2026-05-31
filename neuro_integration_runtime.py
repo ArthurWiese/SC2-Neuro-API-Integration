@@ -46,10 +46,12 @@ class NeuroIntegrationRuntimeMixin:
         self._bank_file_path: Path | None = None
         self._bank_watcher_observer: Any | None = None
         self._bank_change_queue: asyncio.Queue[str] | None = None
+        self._bank_natural_event_counter: int = 0
         self._in_mission: bool | None = None
         self._game_is_paused: bool = False
         self._game_is_blocking: bool = False
         self._game_state_active_value: int | None = None
+        self._last_game_state_active_value: int = 0
         self._game_state_active_last_changed_time: float | None = None
         self._game_state_active_timeout_handled_value: int | None = None
         self._action_queue: deque[dict[str, Any]] = deque()
@@ -251,7 +253,7 @@ class NeuroIntegrationRuntimeMixin:
         if self.banks_path is None or self._bank_file_path is None:
             raise RuntimeError("banks_path or bank file path is not configured")
 
-        self._bank_change_queue = asyncio.Queue()
+        self._bank_change_queue = asyncio.Queue(maxsize=1)
         handler = BankFileEventHandler(self, self._bank_file_path.name)
         observer = Observer()
         observer.schedule(handler, str(Path(self.banks_path)), recursive=False)
@@ -259,51 +261,52 @@ class NeuroIntegrationRuntimeMixin:
         self._bank_watcher_observer = observer
         self.print_line("Bank watcher started.", 2)
 
+        synthetic_enqueue_used = False
+        last_natural_event_counter = self._bank_natural_event_counter
+
         try:
             while self._integration_stop_event is not None and not self._integration_stop_event.is_set():
+                # A real watchdog event resets synthetic idle enqueue behavior.
+                if self._bank_natural_event_counter != last_natural_event_counter:
+                    last_natural_event_counter = self._bank_natural_event_counter
+                    synthetic_enqueue_used = False
+
                 if self._bank_change_queue is None:
-                    await asyncio.sleep(0.25)
+                    await asyncio.sleep(0.1)
                     continue
 
                 try:
-                    changed_path = await asyncio.wait_for(self._bank_change_queue.get(), timeout=0.5)
+                    changed_path = await asyncio.wait_for(self._bank_change_queue.get(), timeout=0.25)
                 except asyncio.TimeoutError:
+                    if (
+                        not synthetic_enqueue_used
+                        and self._bank_file_path is not None
+                        and self._bank_change_queue is not None
+                    ):
+                        try:
+                            self._bank_change_queue.put_nowait(str(self._bank_file_path))
+                            synthetic_enqueue_used = True
+                        except asyncio.QueueFull:
+                            pass
                     continue
 
                 if self._bank_file_path is None:
                     continue
 
-                pending_path: str | None = await self._drain_bank_change_queue(changed_path)
-                while pending_path is not None:
-                    if Path(pending_path).name.lower() != self._bank_file_path.name.lower():
-                        break
+                if Path(changed_path).name.lower() != self._bank_file_path.name.lower():
+                    continue
 
-                    try:
-                        await self._handle_bank_file_updated()
-                    except (OSError, ET.ParseError, RuntimeError, ValueError) as exc:
-                        self.print_line(f"Bank update handling error: {exc}", 0)
+                try:
+                    await self._handle_bank_file_updated()
+                except (OSError, ET.ParseError, RuntimeError, ValueError) as exc:
+                    self.print_line(f"Bank update handling error: {exc}", 0)
 
-                    pending_path = await self._drain_bank_change_queue()
         finally:
             if self._bank_watcher_observer is not None:
                 self._bank_watcher_observer.stop()
                 self._bank_watcher_observer.join(timeout=2.0)
                 self._bank_watcher_observer = None
             self._bank_change_queue = None
-
-    async def _drain_bank_change_queue(self, initial_path: str | None = None) -> str | None:
-        if self._bank_change_queue is None:
-            return initial_path
-
-        latest_path = initial_path
-        while True:
-            try:
-                queued_path = self._bank_change_queue.get_nowait()
-            except asyncio.QueueEmpty:
-                break
-            latest_path = queued_path
-
-        return latest_path
 
     def _notify_bank_file_changed(self, src_path: str) -> None:
         """Called from the watchdog thread when a matching filesystem event occurs.
@@ -319,6 +322,7 @@ class NeuroIntegrationRuntimeMixin:
 
         def _put():
             if self._bank_change_queue is not None:
+                self._bank_natural_event_counter += 1
                 try:
                     self._bank_change_queue.put_nowait(src_path)
                 except asyncio.QueueFull:
@@ -340,6 +344,7 @@ class NeuroIntegrationRuntimeMixin:
         try:
             bank_data = parse_bank_file(self._bank_file_path)
         except FileNotFoundError:
+            self.print_line("Bank file was deleted; clearing active actions and action queue.", 0)
             self._clear_game_state_active_watchdog_state()
             self._game_is_paused = False
             self._action_queue.clear()
@@ -349,21 +354,26 @@ class NeuroIntegrationRuntimeMixin:
             self.print_line("Bank parse failed on file change; retrying on the next change event.", 0)
             return
         
+        game_state = bank_data.get("game_state", {})
+        new_in_mission = game_state.get("in_mission", False)
+
         if not bank_data or "game_state" not in bank_data:
-            self.print_line("Bank file is empty or incomplete. Deregistering all action commands.", 0)
+            self.print_line("Bank file is empty or incomplete.", 0)
             # Game probably entered intermission if the bank file is empty or incomplete
-            await self._send_neuro_context("Entered intermission; game cannot process commands until the next mission starts.")
-            await asyncio.sleep(2)
-            await self._cleanup_bank_file()
+            if self._in_mission:
+                self._in_mission = False
+                await self._unregister_all_active_actions()
+                self._force_action_actions_to_use = []
+                self._action_queue.clear()
+                await self._notify_action_queue_state_changed()
+                await self._send_neuro_context("Entered intermission; game cannot process commands until the next mission starts.")
             return
 
         if bank_data == self._last_parsed_bank_data:
             return
+        self.print_line("Bank file updated; parsed bank data: " + str(bank_data), 2)
 
         self._last_parsed_bank_data = bank_data
-
-        game_state = bank_data.get("game_state", {})
-        new_in_mission = game_state.get("in_mission", False)
 
         if new_in_mission:
             active_changed = self._record_game_state_active_value(game_state.get("active", 0))
@@ -377,19 +387,20 @@ class NeuroIntegrationRuntimeMixin:
         else:
             self._clear_game_state_active_watchdog_state()
             self._game_is_paused = False
+            self._force_action_actions_to_use = []
+            await self._unregister_all_active_actions()
+            self._action_queue.clear()
+            await self._notify_action_queue_state_changed()
 
-        if self._in_mission and not new_in_mission:
+        if self._in_mission and not new_in_mission or self._in_mission is None and not new_in_mission:
             self._in_mission = False
             await self._send_neuro_context("Entered intermission; game cannot process commands until the next mission starts.")
-            await asyncio.sleep(2)
-            await self._cleanup_bank_file()
             return
-        elif not self._in_mission and new_in_mission:
-            self._in_mission = True
-            await self._send_neuro_context("Entered mission; game can now process commands.")
-            self.print_line("Entered mission.", 2)
-        elif self._in_mission is None:
-            self._in_mission = new_in_mission
+        elif not self._in_mission and new_in_mission or self._in_mission is None and new_in_mission:
+            if self._game_state_active_value == 0 or self._game_state_active_value >= self._last_game_state_active_value:
+                # The game is playing tricks on you if this is anything other than 0 at start of mission
+                self._in_mission = True
+                await self._send_neuro_context("Entered mission; game can now process commands.")
 
         new_is_blocking = game_state.get("is_blocking", False)
 
@@ -397,12 +408,10 @@ class NeuroIntegrationRuntimeMixin:
             self._game_is_blocking = False
             if self._in_mission:
                 await self._send_neuro_context("Game is no longer blocking commands.")
-                self.print_line("Game is no longer blocking commands.", 2)
         elif not self._game_is_blocking and new_is_blocking:
             self._game_is_blocking = True
             await self._send_neuro_context("Probably entered a cutscene; Game is blocking and can't process action commands. " \
                                             "Commands will get added to a queue to be processed when the game unblocks.")
-            self.print_line("Game is blocking commands", 2)
         elif self._game_is_blocking is None:
             self._game_is_blocking = new_is_blocking
         await self._notify_action_queue_state_changed()
@@ -415,6 +424,8 @@ class NeuroIntegrationRuntimeMixin:
             skip = await self._skip_if_unsafe_bank_write_window()
             if skip:
                 return
+        else:
+            return  # If not in mission, don't bother writing to bank file
 
         self._bank_update_in_progress = True
         await self._notify_action_queue_state_changed()
@@ -832,7 +843,8 @@ class NeuroIntegrationRuntimeMixin:
             self.print_line(f"Neuro listener error: {exc}", 0)
 
     async def _handle_neuro_text_message(self, payload_text: str) -> None:
-        self.print_line(f"Received message from Neuro: {payload_text}", 2)
+        self.print_line("Neuro -> Integration: Received message.", 2)
+        self.print_line(f"Message: {payload_text}", 2)
 
         try:
             payload = json.loads(payload_text)
@@ -1169,6 +1181,10 @@ class NeuroIntegrationRuntimeMixin:
         loop = asyncio.get_running_loop()
         current_time = loop.time()
         if self._game_state_active_value != active_value:
+            if self._game_state_active_value is None:
+                self._last_game_state_active_value = int(0)
+            else:
+                self._last_game_state_active_value = self._game_state_active_value
             self._game_state_active_value = active_value
             self._game_state_active_last_changed_time = current_time
             self._game_state_active_timeout_handled_value = None
@@ -1225,7 +1241,7 @@ class NeuroIntegrationRuntimeMixin:
         if self._bank_file_path is not None:
             try:
                 self._bank_file_path.unlink(missing_ok=True)
-                self.print_line("Deleted empty/incomplete bank file.", 2)
+                self.print_line("Deleted bank file.", 2)
             except OSError as exc:
                 self.print_line(f"Failed to delete empty/incomplete bank file: {exc}", 0)
         try:
@@ -1288,6 +1304,7 @@ class NeuroIntegrationRuntimeMixin:
         self._action_queue_blocked_until = 0.0
         self._game_is_paused = False
         self._game_state_active_value = None
+        self._last_game_state_active_value = 0
         self._game_state_active_last_changed_time = None
         self._game_state_active_timeout_handled_value = None
         self._last_parsed_bank_data = {}

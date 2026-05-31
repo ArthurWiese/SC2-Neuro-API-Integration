@@ -165,8 +165,9 @@ void gf_OrderUnitToMoveThenTurnToTargetPointsFacing (unit lp_u, point lp_targetP
 trigger gt_Executeactions;
 trigger gt_Raynormaxhealthtrigger;
 trigger gt_Raynormaxhealth;
-trigger gt_Init;
+trigger gt_InitMap;
 trigger gt_Closedialog;
+trigger gt_CleanUp;
 trigger gt_Initialization;
 trigger gt_Init01Technology;
 trigger gt_Init02Players;
@@ -329,6 +330,7 @@ bool gt_Executeactions_Func (bool testConds, bool runActions) {
         return true;
     }
 
+    libEFA54406_gv_bankwriteallowed = false;
     BankLoad("NeuroIntegration", 1);
     BankWait(BankLastCreated());
     while ((lv_always_true == true)) {
@@ -368,7 +370,6 @@ bool gt_Executeactions_Func (bool testConds, bool runActions) {
 //--------------------------------------------------------------------------------------------------
 void gt_Executeactions_Init () {
     gt_Executeactions = TriggerCreate("gt_Executeactions_Func");
-    TriggerAddEventTimeElapsed(gt_Executeactions, 1.0, c_timeReal);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -422,22 +423,28 @@ void gt_Raynormaxhealth_Init () {
 }
 
 //--------------------------------------------------------------------------------------------------
-// Trigger: Init
+// Trigger: Init Map
 //--------------------------------------------------------------------------------------------------
-bool gt_Init_Func (bool testConds, bool runActions) {
+bool gt_InitMap_Func (bool testConds, bool runActions) {
     // Automatic Variable Declarations
     // Actions
     if (!runActions) {
         return true;
     }
 
+    TriggerStop(gt_Executeactions);
+    TriggerExecute(libEFA54406_gt_CreateNeuroIntegrationbank, true, false);
+    Wait(1.0, c_timeReal);
+    TriggerExecute(libEFA54406_gt_DisableAchievementsCheats, true, false);
+    TriggerExecute(gt_Executeactions, true, false);
     return true;
 }
 
 //--------------------------------------------------------------------------------------------------
-void gt_Init_Init () {
-    gt_Init = TriggerCreate("gt_Init_Func");
-    TriggerAddEventMapInit(gt_Init);
+void gt_InitMap_Init () {
+    gt_InitMap = TriggerCreate("gt_InitMap_Func");
+    TriggerAddEventMapInit(gt_InitMap);
+    TriggerAddEventLoadGameDone(gt_InitMap);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -465,6 +472,27 @@ bool gt_Closedialog_Func (bool testConds, bool runActions) {
 void gt_Closedialog_Init () {
     gt_Closedialog = TriggerCreate("gt_Closedialog_Func");
     TriggerAddEventDialogControl(gt_Closedialog, c_playerAny, c_invalidDialogControlId, c_triggerControlEventTypeClick);
+}
+
+//--------------------------------------------------------------------------------------------------
+// Trigger: Clean Up
+//--------------------------------------------------------------------------------------------------
+bool gt_CleanUp_Func (bool testConds, bool runActions) {
+    // Automatic Variable Declarations
+    // Actions
+    if (!runActions) {
+        return true;
+    }
+
+    TriggerStop(gt_Executeactions);
+    TriggerExecute(libEFA54406_gt_CleanNeuroIntegrationbank, false, true);
+    return true;
+}
+
+//--------------------------------------------------------------------------------------------------
+void gt_CleanUp_Init () {
+    gt_CleanUp = TriggerCreate("gt_CleanUp_Func");
+    TriggerAddEventPlayerLeft(gt_CleanUp, 1, c_gameResultUndecided);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -6139,8 +6167,9 @@ void InitTriggers () {
     gt_Executeactions_Init();
     gt_Raynormaxhealthtrigger_Init();
     gt_Raynormaxhealth_Init();
-    gt_Init_Init();
+    gt_InitMap_Init();
     gt_Closedialog_Init();
+    gt_CleanUp_Init();
     gt_Initialization_Init();
     gt_Init01Technology_Init();
     gt_Init02Players_Init();

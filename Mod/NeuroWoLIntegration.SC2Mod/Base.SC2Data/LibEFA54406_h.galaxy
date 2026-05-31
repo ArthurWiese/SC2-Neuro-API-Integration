@@ -18,7 +18,7 @@ void libEFA54406_gf_UnblockCommands (bool lp_clear_queue);
 // Trigger Declarations
 trigger libEFA54406_gt_Playerchatmessage;
 trigger libEFA54406_gt_DisableAchievementsCheats;
-trigger libEFA54406_gt_CreateinitialNeuroIntegrationbank;
+trigger libEFA54406_gt_CreateNeuroIntegrationbank;
 trigger libEFA54406_gt_CleanNeuroIntegrationbank;
 trigger libEFA54406_gt_BlockCommands;
 trigger libEFA54406_gt_ClearQueue;
