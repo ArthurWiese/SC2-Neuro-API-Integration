@@ -2,7 +2,7 @@
 ## How the integration works
 StarCraft 2 is able to read and write to bank files to share information over multiple maps, like during a campaign. The structure of these bank files is in XML format.
 
-Both the game and the integration communicate over this file with timed read and write windows to avoid read/write conflicts. (This was actually one of the hardest problems to solve) When a map is loaded the game periodically checks the NeuroIntegration.SC2Bank file and when specific values are found they trigger certain effects in-game. 
+Both the game and the integration communicate over this file with timed read and write windows to avoid read/write conflicts (This was actually one of the hardest problems to solve). When a map is loaded the game periodically checks the NeuroIntegration.SC2Bank file and when specific values are found they trigger certain effects in-game. 
 
 The job of the integration is to convert values in the bank file into messages to Neuro and vice versa.
 
@@ -10,12 +10,14 @@ The integration recognises when a mission is active, if the game is currently in
 
 The integration searches and works with the bank file named NeuroIntegration.SC2Bank.
 
+The integration can be started at any time and works with saves and loads.
+
 ## Structure of the .SC2Mod file
 All .SC2Map files that use the Neuro API integration have a dependency to a .SC2Mod file.
 
 This file contains:
-- Triggers shared by all maps to make the integration work
 - Templates to create action commands, force action commands and context commands
+- Triggers shared by all maps to make the integration work
 - Global variable to control when the game can write to the bank file
 
 ### Create initital NeuroIntegration bank
