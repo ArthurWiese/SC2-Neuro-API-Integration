@@ -272,7 +272,8 @@ class NeuroIntegrationRuntimeMixin:
                     synthetic_enqueue_used = False
 
                 if self._bank_change_queue is None:
-                    await asyncio.sleep(0.1)
+                    self.print_line("Bank change queue is not initialised.", 0)
+                    await asyncio.sleep(0.25)
                     continue
 
                 try:
