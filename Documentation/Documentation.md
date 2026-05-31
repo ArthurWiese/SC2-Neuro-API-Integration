@@ -143,6 +143,34 @@ Finally open a window to let the game write to the bank file before repeating.
 
 When the game is paused this loop will get frozen which leads to the "active" value not being updated and the integration noticing that the game is paused.
 
+Note: Beware of the needed type for some functions in SC2. For example "chat_message_arg_1" first needs to be converted to a text to be displayed in a chat message.
+
+</details>
+
+## Example force action: "decide_raynor_max_health"
+Example of a force action from the demo map.
+
+<details>
+<summary>Example force action</summary>
+<img src="ForceActionFileStructure.jpg">
+
+### Create the force action
+<img src="RaynorTrigger.jpg">
+
+Prevent the trigger to be activated again.
+
+<img src="Raynor.jpg">
+<img src="CloseDialog.jpg">
+
+- First some info for the player, so they understand what the force action is about
+- Create the "decide_raynor_max_health" action with only one use
+- Create the force action with "decide_raynor_max_health"
+
+### Handle the response
+<img src="RaynorExecuteAction.jpg">
+
+In the loop of the execute actions trigger handle the response from Neuro.
+
 </details>
 
 ## Some notes
