@@ -12,7 +12,7 @@ My goal is to create a custom Wings of Liberty campaign experience where Neuro g
 
 For proposing ideas and current progress see [SC2 Neuro WoL Integration plan]()
 
-If you want to contribute to the SC2 Neuro WoL Integration see [Neuro-sama Discord]() under projects/SC2 Neuro WoL Integration
+If you want to contribute to the SC2 Neuro WoL Integration also see [Neuro-sama Discord]() under projects/SC2 Neuro WoL Integration
 
 ## Getting started
 Note: Should only work on Windows for now (Because of file paths, etc...)
@@ -40,7 +40,7 @@ neuro_url <URL>
 ```
 start
 ```
-7. For the demo start a new Wings of Liberty campaign in StarCraft 2 and start the first mission.
+7. For the demo start a new Wings of Liberty campaign in StarCraft 2 and start the first mission
 
 Note: For custom text to be displayed correctly you need to have your game language switched to English
 
