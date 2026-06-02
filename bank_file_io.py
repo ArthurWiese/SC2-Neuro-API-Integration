@@ -111,7 +111,7 @@ def write_bank_values(bank_file: Path, updates: dict[str, dict[str, Any]]) -> No
                     value_node = key_node.find("Value")
                     if value_node is None:
                         value_node = ET.SubElement(key_node, "Value")
-                    _set_bank_value_node(value_node, value, key_name)
+                    _set_bank_value_node(value_node, value)
 
             ET.indent(tree, space="    ")
 
@@ -146,7 +146,7 @@ def _find_or_create_key(section_node: ET.Element, key_name: str) -> ET.Element:
     return ET.SubElement(section_node, "Key", {"name": key_name})
 
 
-def _set_bank_value_node(value_node: ET.Element, value: Any, key_name: str | None = None) -> None:
+def _set_bank_value_node(value_node: ET.Element, value: Any) -> None:
     value_node.attrib.clear()
     value_node.text = None
 

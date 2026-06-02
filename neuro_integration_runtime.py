@@ -844,7 +844,7 @@ class NeuroIntegrationRuntimeMixin:
             priority = priority_value.strip().lower()
             if priority not in {"low", "medium", "high", "critical"}:
                 self.print_line(f"Invalid priority in received force action {group_key}: {priority}, using default 'low'", 0)
-                update = {f"{group_key}_priority": "low"}
+                update = {"force_action": {f"{group_key}_priority": "low"}}
                 try:
                     await self._run_serialised_bank_write(lambda: write_bank_values(self._bank_file_path, update))
                 except Exception:
