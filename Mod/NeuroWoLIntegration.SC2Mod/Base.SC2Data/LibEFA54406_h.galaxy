@@ -5,6 +5,8 @@ include "TriggerLibs/natives"
 //--------------------------------------------------------------------------------------------------
 // Variable Declarations
 bool libEFA54406_gv_bankwriteallowed;
+bank libEFA54406_gv_neuroIntegration;
+int libEFA54406_gv_currentbankbackupid;
 
 // Function Declarations
 void libEFA54406_gf_create_action_0_arg (string lp_action_name, bool lp_action_active, string lp_action_description, int lp_action_uses);
@@ -17,11 +19,16 @@ void libEFA54406_gf_UnblockCommands (bool lp_clear_queue);
 
 // Trigger Declarations
 trigger libEFA54406_gt_Playerchatmessage;
-trigger libEFA54406_gt_DisableAchievementsCheats;
+trigger libEFA54406_gt_InitMap;
 trigger libEFA54406_gt_CreateNeuroIntegrationbank;
+trigger libEFA54406_gt_DisableAchievementsCheats;
+trigger libEFA54406_gt_CleanUp;
 trigger libEFA54406_gt_CleanNeuroIntegrationbank;
 trigger libEFA54406_gt_BlockCommands;
 trigger libEFA54406_gt_ClearQueue;
+trigger libEFA54406_gt_InitLoad;
+trigger libEFA54406_gt_Savebackupbankinit;
+trigger libEFA54406_gt_Savebackupbank;
 
 // Library Initialization
 void libEFA54406_InitVariables ();

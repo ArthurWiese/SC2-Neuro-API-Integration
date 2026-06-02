@@ -246,8 +246,8 @@ def clear_game_context_flags(bank_file: Path) -> None:
         raise
 
 
-def clear_force_action_section(bank_file: Path) -> None:
-    """Remove all keys from the 'force_action' section."""
+def clear_force_action_group(bank_file: Path, group_key: str) -> None:
+    """Remove force_action keys whose names start with group_key."""
     attempts = 0
     max_attempts = 2
     backoff = 0.03
@@ -264,8 +264,11 @@ def clear_force_action_section(bank_file: Path) -> None:
                     keys = list(section.findall("Key"))
                     if keys:
                         for key_node in keys:
+                            key_name = key_node.get("name") or ""
+                            if not key_name.startswith(group_key):
+                                continue
                             section.remove(key_node)
-                        changed = True
+                            changed = True
                     break
 
             if changed:

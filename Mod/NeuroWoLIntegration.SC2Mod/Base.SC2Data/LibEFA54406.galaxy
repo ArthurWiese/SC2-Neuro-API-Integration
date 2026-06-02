@@ -167,6 +167,59 @@ void libEFA54406_gt_Playerchatmessage_Init () {
 }
 
 //--------------------------------------------------------------------------------------------------
+// Trigger: Init Map
+//--------------------------------------------------------------------------------------------------
+bool libEFA54406_gt_InitMap_Func (bool testConds, bool runActions) {
+    // Automatic Variable Declarations
+    // Actions
+    if (!runActions) {
+        return true;
+    }
+
+    TriggerExecute(libEFA54406_gt_CreateNeuroIntegrationbank, true, false);
+    Wait(1.0, c_timeReal);
+    TriggerExecute(libEFA54406_gt_DisableAchievementsCheats, true, false);
+    TriggerSendEvent("execute_actions");
+    return true;
+}
+
+//--------------------------------------------------------------------------------------------------
+void libEFA54406_gt_InitMap_Init () {
+    libEFA54406_gt_InitMap = TriggerCreate("libEFA54406_gt_InitMap_Func");
+    TriggerAddEventMapInit(libEFA54406_gt_InitMap);
+}
+
+//--------------------------------------------------------------------------------------------------
+// Trigger: Create NeuroIntegration bank
+//--------------------------------------------------------------------------------------------------
+bool libEFA54406_gt_CreateNeuroIntegrationbank_Func (bool testConds, bool runActions) {
+    // Automatic Variable Declarations
+    // Actions
+    if (!runActions) {
+        return true;
+    }
+
+    BankLoad("NeuroIntegration", 1);
+    BankWait(BankLastCreated());
+    libEFA54406_gv_neuroIntegration = BankLastCreated();
+    BankSectionRemove(BankLastCreated(), "game_context");
+    BankSectionRemove(BankLastCreated(), "possible_actions");
+    BankSectionRemove(BankLastCreated(), "do_action");
+    BankSectionRemove(BankLastCreated(), "force_action");
+    BankValueSetFromFlag(BankLastCreated(), "game_state", "in_mission", true);
+    BankValueSetFromInt(BankLastCreated(), "game_state", "active", 0);
+    BankSave(BankLastCreated());
+    TriggerExecute(libEFA54406_gt_ClearQueue, true, false);
+    libEFA54406_gf_create_action_1_arg("chat_message", true, "Post a message into the game chat", "string", -1);
+    return true;
+}
+
+//--------------------------------------------------------------------------------------------------
+void libEFA54406_gt_CreateNeuroIntegrationbank_Init () {
+    libEFA54406_gt_CreateNeuroIntegrationbank = TriggerCreate("libEFA54406_gt_CreateNeuroIntegrationbank_Func");
+}
+
+//--------------------------------------------------------------------------------------------------
 // Trigger: Disable Achievements/Cheats
 //--------------------------------------------------------------------------------------------------
 bool libEFA54406_gt_DisableAchievementsCheats_Func (bool testConds, bool runActions) {
@@ -188,33 +241,24 @@ void libEFA54406_gt_DisableAchievementsCheats_Init () {
 }
 
 //--------------------------------------------------------------------------------------------------
-// Trigger: Create NeuroIntegration bank
+// Trigger: Clean Up
 //--------------------------------------------------------------------------------------------------
-bool libEFA54406_gt_CreateNeuroIntegrationbank_Func (bool testConds, bool runActions) {
+bool libEFA54406_gt_CleanUp_Func (bool testConds, bool runActions) {
     // Automatic Variable Declarations
     // Actions
     if (!runActions) {
         return true;
     }
 
-    BankLoad("NeuroIntegration", 1);
-    BankWait(BankLastCreated());
-    BankReload(BankLastCreated());
-    BankWait(BankLastCreated());
-    BankSectionRemove(BankLastCreated(), "game_context");
-    BankSectionRemove(BankLastCreated(), "possible_actions");
-    BankSectionRemove(BankLastCreated(), "do_action");
-    BankSectionRemove(BankLastCreated(), "force_action");
-    BankValueSetFromFlag(BankLastCreated(), "game_state", "in_mission", true);
-    BankValueSetFromInt(BankLastCreated(), "game_state", "active", 0);
-    BankSave(BankLastCreated());
-    libEFA54406_gf_create_action_1_arg("chat_message", true, "Post a message into the game chat", "string", -1);
+    TriggerSendEvent("stop_execution");
+    TriggerExecute(libEFA54406_gt_CleanNeuroIntegrationbank, false, true);
     return true;
 }
 
 //--------------------------------------------------------------------------------------------------
-void libEFA54406_gt_CreateNeuroIntegrationbank_Init () {
-    libEFA54406_gt_CreateNeuroIntegrationbank = TriggerCreate("libEFA54406_gt_CreateNeuroIntegrationbank_Func");
+void libEFA54406_gt_CleanUp_Init () {
+    libEFA54406_gt_CleanUp = TriggerCreate("libEFA54406_gt_CleanUp_Func");
+    TriggerAddEventPlayerLeft(libEFA54406_gt_CleanUp, 1, c_gameResultUndecided);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -297,13 +341,82 @@ void libEFA54406_gt_ClearQueue_Init () {
     libEFA54406_gt_ClearQueue = TriggerCreate("libEFA54406_gt_ClearQueue_Func");
 }
 
+//--------------------------------------------------------------------------------------------------
+// Trigger: Init Load
+//--------------------------------------------------------------------------------------------------
+bool libEFA54406_gt_InitLoad_Func (bool testConds, bool runActions) {
+    // Automatic Variable Declarations
+    // Actions
+    if (!runActions) {
+        return true;
+    }
+
+    TriggerSendEvent("stop_execution");
+    BankRestore(libEFA54406_gv_neuroIntegration, 1, libEFA54406_gv_currentbankbackupid);
+    BankSave(libEFA54406_gv_neuroIntegration);
+    Wait(1.0, c_timeReal);
+    TriggerSendEvent("execute_actions");
+    return true;
+}
+
+//--------------------------------------------------------------------------------------------------
+void libEFA54406_gt_InitLoad_Init () {
+    libEFA54406_gt_InitLoad = TriggerCreate("libEFA54406_gt_InitLoad_Func");
+    TriggerAddEventLoadGameDone(libEFA54406_gt_InitLoad);
+}
+
+//--------------------------------------------------------------------------------------------------
+// Trigger: Save backup bank init
+//--------------------------------------------------------------------------------------------------
+bool libEFA54406_gt_Savebackupbankinit_Func (bool testConds, bool runActions) {
+    // Automatic Variable Declarations
+    // Actions
+    if (!runActions) {
+        return true;
+    }
+
+    TriggerSendEvent("save_backup_bank");
+    return true;
+}
+
+//--------------------------------------------------------------------------------------------------
+void libEFA54406_gt_Savebackupbankinit_Init () {
+    libEFA54406_gt_Savebackupbankinit = TriggerCreate("libEFA54406_gt_Savebackupbankinit_Func");
+    TriggerAddEventSaveGame(libEFA54406_gt_Savebackupbankinit);
+}
+
+//--------------------------------------------------------------------------------------------------
+// Trigger: Save backup bank
+//--------------------------------------------------------------------------------------------------
+bool libEFA54406_gt_Savebackupbank_Func (bool testConds, bool runActions) {
+    // Automatic Variable Declarations
+    // Actions
+    if (!runActions) {
+        return true;
+    }
+
+    BankBackup(libEFA54406_gv_neuroIntegration, 1);
+    return true;
+}
+
+//--------------------------------------------------------------------------------------------------
+void libEFA54406_gt_Savebackupbank_Init () {
+    libEFA54406_gt_Savebackupbank = TriggerCreate("libEFA54406_gt_Savebackupbank_Func");
+    TriggerAddEventGeneric(libEFA54406_gt_Savebackupbank, "save_backup_bank");
+}
+
 void libEFA54406_InitTriggers () {
     libEFA54406_gt_Playerchatmessage_Init();
-    libEFA54406_gt_DisableAchievementsCheats_Init();
+    libEFA54406_gt_InitMap_Init();
     libEFA54406_gt_CreateNeuroIntegrationbank_Init();
+    libEFA54406_gt_DisableAchievementsCheats_Init();
+    libEFA54406_gt_CleanUp_Init();
     libEFA54406_gt_CleanNeuroIntegrationbank_Init();
     libEFA54406_gt_BlockCommands_Init();
     libEFA54406_gt_ClearQueue_Init();
+    libEFA54406_gt_InitLoad_Init();
+    libEFA54406_gt_Savebackupbankinit_Init();
+    libEFA54406_gt_Savebackupbank_Init();
 }
 
 //--------------------------------------------------------------------------------------------------

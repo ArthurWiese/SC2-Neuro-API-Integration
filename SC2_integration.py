@@ -46,7 +46,7 @@ class TerminalApp(NeuroIntegrationRuntimeMixin):
         self.config_file = Path("configure.json")
         self.game_path: str | None = None
         self.banks_path: str | None = None
-        self.NEURO_URL: str | None = None
+        self.neuro_url: str | None = None
         self._ui_queue: queue.Queue[tuple[str, int, bool]] = queue.Queue()
         self._closing: bool = False
         self.connection_handler = sc2api_connection_handler.SC2ConnectionHandler(self)
@@ -431,8 +431,8 @@ class TerminalApp(NeuroIntegrationRuntimeMixin):
 
             case "neuro_url":
                 if not argument_text:
-                    if self.NEURO_URL is not None:
-                        self.print_line(f"Current Neuro URL is {self.NEURO_URL}", 1)
+                    if self.neuro_url is not None:
+                        self.print_line(f"Current Neuro URL is {self.neuro_url}", 1)
                     else:
                         self.print_line("Neuro URL is not set.", 1)
                     return ["Error: neuro_url requires a URL argument. Usage: neuro_url <websocket server url>"]
@@ -602,8 +602,8 @@ class TerminalApp(NeuroIntegrationRuntimeMixin):
                 if neuro_url:
                     parsed = urlparse(str(neuro_url).strip())
                     if parsed.scheme in {"ws", "wss"} and parsed.netloc:
-                        self.NEURO_URL = str(neuro_url).strip()
-                        self.print_line(f"Configured Neuro URL: {self.NEURO_URL}", 1)
+                        self.neuro_url = str(neuro_url).strip()
+                        self.print_line(f"Configured Neuro URL: {self.neuro_url}", 1)
                     else:
                         self.print_line("Error: Configured Neuro URL is invalid", 0)
 

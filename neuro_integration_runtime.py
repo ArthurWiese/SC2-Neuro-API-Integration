@@ -4,6 +4,7 @@ import asyncio
 from collections import deque
 import json
 import re
+import time
 from pathlib import Path
 from watchdog.observers import Observer
 from typing import Any, Callable, TYPE_CHECKING
@@ -15,7 +16,7 @@ import psutil
 
 from bank_file_io import (
     BankFileEventHandler,
-    clear_force_action_section,
+    clear_force_action_group,
     parse_bank_file,
     write_bank_values,
     clear_game_context_flags,
@@ -40,6 +41,7 @@ class NeuroIntegrationRuntimeMixin:
         self._neuro_ws: aiohttp.ClientWebSocketResponse | None = None
         self._neuro_listener_task: asyncio.Task | None = None
         self._bank_monitor_task: asyncio.Task | None = None
+        self._backup_bank_monitor_task: asyncio.Task | None = None
         self._sc2_watchdog_task: asyncio.Task | None = None
         self._game_state_active_watchdog_task: asyncio.Task | None = None
         self._action_queue_worker_task: asyncio.Task | None = None
@@ -47,6 +49,8 @@ class NeuroIntegrationRuntimeMixin:
         self._bank_watcher_observer: Any | None = None
         self._bank_change_queue: asyncio.Queue[str] | None = None
         self._bank_natural_event_counter: int = 0
+        self._backup_bank_id: int | None = None
+        self._last_backup_bank_id: int | None = None
         self._last_parsed_bank_data: dict[str, dict[str, Any]] = {}
         self._in_mission: bool | None = None
         self._game_is_paused: bool = False
@@ -55,7 +59,7 @@ class NeuroIntegrationRuntimeMixin:
         self._last_game_state_active_value: int = 0
         self._game_state_active_last_changed_time: float | None = None
         self._game_state_active_timeout_handled_value: int | None = None
-        self._force_action_actions_to_use: list[str] = []
+        self._active_force_groups: list[tuple[list[str], str, str, bool, str]] = []
         self._active_actions: dict[str, dict[str, Any]] = {}
         self._action_queue: deque[dict[str, Any]] = deque()
         self._action_queue_condition: asyncio.Condition = asyncio.Condition()
@@ -71,10 +75,10 @@ class NeuroIntegrationRuntimeMixin:
         if parsed.scheme not in {"ws", "wss"} or not parsed.netloc:
             return ["Error: neuro_url must be a valid websocket URL"]
 
-        self.NEURO_URL = url
-        self._save_configuration("neuro_url", self.NEURO_URL)
+        self.neuro_url = url
+        self._save_configuration("neuro_url", self.neuro_url)
 
-        return [f"Neuro URL set to: {self.NEURO_URL}"]
+        return [f"Neuro URL set to: {self.neuro_url}"]
 
     async def _start_integration(self) -> list[str]:
         if self.integration_running:
@@ -83,10 +87,10 @@ class NeuroIntegrationRuntimeMixin:
         if not self.banks_path:
             return ["Error: banks_path is not set. Use banks_path <path> first."]
 
-        if not self.NEURO_URL:
+        if not self.neuro_url:
             return ["Error: neuro_url is not set. Use neuro_url <websocket server url> first."]
 
-        parsed = urlparse(self.NEURO_URL)
+        parsed = urlparse(self.neuro_url)
         if parsed.scheme not in {"ws", "wss"} or not parsed.netloc:
             return ["Error: neuro_url is invalid. Use neuro_url <websocket server url> to set a valid URL."]
 
@@ -124,18 +128,20 @@ class NeuroIntegrationRuntimeMixin:
 
             self._bank_file_path = await self._wait_for_integration_bank_file()
 
+            # Monitor the backup folder to rename them (unqiue id for the game to load the correct backup)
+            self._backup_bank_monitor_task = asyncio.create_task(self._monitor_backup_bank(), name="backup-bank-monitor")
+
+            # Monitor the bank file for changes
             self._bank_monitor_task = asyncio.create_task(self._monitor_bank_changes(), name="bank-monitor")
 
             # Start SC2 process watchdog that will deactivate bank flags if SC2 exits
-            if self._sc2_watchdog_task is None:
-                self._sc2_watchdog_task = asyncio.create_task(self._monitor_sc2_process(), name="sc2-watchdog")
+            self._sc2_watchdog_task = asyncio.create_task(self._monitor_sc2_process(), name="sc2-watchdog")
 
             # Is the game paused or not active check
-            if self._game_state_active_watchdog_task is None:
-                self._game_state_active_watchdog_task = asyncio.create_task(self._monitor_game_state_active_timeout(), name="game-state-active-watchdog")
+            self._game_state_active_watchdog_task = asyncio.create_task(self._monitor_game_state_active_timeout(), name="game-state-active-watchdog")
 
-            if self._action_queue_worker_task is None:
-                self._action_queue_worker_task = asyncio.create_task(self._process_action_queue(), name="action-queue-worker")
+            # Write received actions to bank file
+            self._action_queue_worker_task = asyncio.create_task(self._process_action_queue(), name="action-queue-worker")
             
             self.print_line("Integration bootstrap complete.", 1)
 
@@ -155,15 +161,15 @@ class NeuroIntegrationRuntimeMixin:
             self.integration_running = False
 
     async def _connect_neuro_websocket(self) -> None:
-        if self.NEURO_URL is None:
+        if self.neuro_url is None:
             raise RuntimeError("Neuro URL is not configured")
 
-        self.print_line(f"Connecting to Neuro websocket at {self.NEURO_URL}...", 1)
+        self.print_line(f"Connecting to Neuro websocket at {self.neuro_url}...", 1)
 
         timeout = aiohttp.ClientTimeout(total=15)
         session = aiohttp.ClientSession(timeout=timeout)
         try:
-            ws = await session.ws_connect(self.NEURO_URL)
+            ws = await session.ws_connect(self.neuro_url)
         except Exception:
             await session.close()
             raise
@@ -249,6 +255,70 @@ class NeuroIntegrationRuntimeMixin:
                 last_reminder_time = current_time
             await asyncio.sleep(0.5)
 
+    async def _monitor_backup_bank(self) -> None:
+        expected_backup_number = 0
+        while self._integration_stop_event is not None and not self._integration_stop_event.is_set():
+            try:
+                if self.banks_path is None or self._last_backup_bank_id is None:
+                    await asyncio.sleep(0.1)
+                    continue
+
+                backup_folder = Path(self.banks_path) / "backup"
+                if not backup_folder.exists() or not backup_folder.is_dir():
+                    await asyncio.sleep(0.1)
+                    continue
+                
+                # Game will save backup with id highest_backup_id + 1
+                highest_backup_number = self._find_highest_backup_number(backup_folder, expected_backup_number)
+                if highest_backup_number == 0:
+                    expected_backup_number = highest_backup_number
+                else:
+                    expected_backup_number = highest_backup_number + 1
+                backup_file = backup_folder / f"NeuroIntegration_backup_{expected_backup_number}.SC2Bank"
+                if not backup_file.exists() or not backup_file.is_file():
+                    await asyncio.sleep(0.1)
+                    continue
+
+                new_backup_name = backup_folder / f"NeuroIntegration_backup_{self._last_backup_bank_id}.SC2Bank"
+                try:
+                    backup_file.rename(new_backup_name)
+                    self.print_line(f"Renamed backup bank file to {new_backup_name.name}.", 2)
+                except FileNotFoundError:
+                    pass
+                except OSError as exc:
+                    self.print_line(f"Failed to rename backup bank file: {exc}", 0)
+
+                await asyncio.sleep(0.1)
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                self.print_line(f"Backup bank monitor error: {exc}", 0)
+                await asyncio.sleep(0.1)
+
+    def _find_highest_backup_number(self, backup_folder: Path, expected_backup_number: int ) -> int:
+        highest_backup_number = 0
+        prefix = "NeuroIntegration_backup_"
+        suffix = ".SC2Bank"
+
+        for candidate_path in backup_folder.iterdir():
+            if not candidate_path.is_file():
+                continue
+
+            filename = candidate_path.name
+            if not filename.startswith(prefix) or not filename.endswith(suffix):
+                continue
+
+            number_text = filename[len(prefix):-len(suffix)]
+            if not number_text.isdigit():
+                continue
+
+            highest_backup_number = max(highest_backup_number, int(number_text))
+        
+        if expected_backup_number != 0 and highest_backup_number == expected_backup_number:
+            return highest_backup_number - 1
+        
+        return highest_backup_number
+    
     async def _monitor_bank_changes(self) -> None:
         if self.banks_path is None or self._bank_file_path is None:
             raise RuntimeError("banks_path or bank file path is not configured")
@@ -350,14 +420,14 @@ class NeuroIntegrationRuntimeMixin:
             await self._cleanup_communication()
             return
         except ET.ParseError:
-            self.print_line("Bank parse failed on file change; retrying on the next change event.", 0)
+            self.print_line("Bank parse failed on file change; retrying on the next change event.", 2)
             return
         
         game_state = bank_data.get("game_state", {})
         new_in_mission = game_state.get("in_mission", False)
 
         if not bank_data or "game_state" not in bank_data:
-            self.print_line("Bank file is empty or incomplete.", 0)
+            self.print_line("Bank file is empty or incomplete.", 2)
             # Game probably entered intermission if the bank file is empty or incomplete
             if self._in_mission:
                 self._in_mission = False
@@ -367,7 +437,7 @@ class NeuroIntegrationRuntimeMixin:
 
         if bank_data == self._last_parsed_bank_data:
             return
-        self.print_line("Bank file updated; parsed bank data: " + str(bank_data), 2)
+        #   self.print_line("Bank file updated; parsed bank data: " + str(bank_data), 2)
 
         self._last_parsed_bank_data = bank_data
 
@@ -377,6 +447,15 @@ class NeuroIntegrationRuntimeMixin:
                 # Notify action queue worker that a new active value was recorded
                 # This opens a 0.3s processing window for the next queued action
                 await self._notify_action_queue_state_changed()
+                # Update unique backup bank id (game stores 32-bit signed integers)
+                backup_bank_id = int(time.time() * 1000) % 2147483647
+                if backup_bank_id <= 0:
+                    backup_bank_id = 1
+                update = {"game_state": {"backup_bank_id": backup_bank_id}}
+                await self._run_serialised_bank_write(lambda: write_bank_values(self._bank_file_path, update))
+                # Game will not have saved the backup id yet when it's saved, so the last id is the actual id that will be used
+                self._last_backup_bank_id = self._backup_bank_id
+                self._backup_bank_id = backup_bank_id
                 if self._game_is_paused:
                     self._game_is_paused = False
                     await self._send_neuro_context("Game is now unpaused.")
@@ -401,7 +480,7 @@ class NeuroIntegrationRuntimeMixin:
             self._game_is_blocking = False
             if self._in_mission:
                 await self._send_neuro_context("Game is no longer blocking commands.")
-        elif not self._game_is_blocking and new_is_blocking:
+        elif not self._game_is_blocking and new_is_blocking or self._game_is_blocking is None and new_is_blocking:
             self._game_is_blocking = True
             await self._send_neuro_context("Probably entered a cutscene; Game is blocking and can't process action commands. " \
                                             "Commands will get added to a queue to be processed when the game unblocks.")
@@ -458,7 +537,7 @@ class NeuroIntegrationRuntimeMixin:
                 self._action_queue.clear()
                 await self._notify_action_queue_state_changed()
             update = {"game_state": {"clear_queue": False}}
-            await self._run_serialized_bank_write(lambda: write_bank_values(self._bank_file_path, update))
+            await self._run_serialised_bank_write(lambda: write_bank_values(self._bank_file_path, update))
 
     def _format_action_command_for_context(self, action_command: dict[str, Any]) -> str:
         action_name = action_command.get("name")
@@ -490,7 +569,7 @@ class NeuroIntegrationRuntimeMixin:
                     silent = False
         
         try:
-            await self._run_serialized_bank_write(lambda: clear_game_context_flags(self._bank_file_path))
+            await self._run_serialised_bank_write(lambda: clear_game_context_flags(self._bank_file_path))
         except Exception:
             self.print_line("Failed to clear game_context flags in bank file after sending.", 0)
 
@@ -536,7 +615,6 @@ class NeuroIntegrationRuntimeMixin:
             self._active_actions[name] = latest_actions[name]
 
     def _extract_actions(self, possible_actions: dict[str, Any]) -> list[dict[str, Any]]:
-        # Rechecks actions every bank update which is not efficient and can lead to spamming of error messages in integration terminal
         action_names: set[str] = set()
         for key in possible_actions:
             if key.endswith("_active"):
@@ -744,7 +822,6 @@ class NeuroIntegrationRuntimeMixin:
             return
 
         force_groups: list[tuple[list[str], str, str, bool, str]] = []
-        any_sent = False
 
         for key, query_value in force_action_section.items():
             if not isinstance(key, str) or not key.endswith("_query"):
@@ -755,53 +832,70 @@ class NeuroIntegrationRuntimeMixin:
             if not action_names:
                 continue
 
+            if any(action_name not in self._active_actions for action_name in action_names):
+                self.print_line(f"One or more action names in received force action are not in the list of active actions; removing force action. \nActive actions: {sorted(self._active_actions)}. Force action actions: {action_names}", 0)
+                await self._run_serialised_bank_write(lambda: clear_force_action_group(self._bank_file_path, group_key=group_key))
+                continue
+
             state_value = force_action_section.get(f"{group_key}_state")
             ephemeral_value = force_action_section.get(f"{group_key}_ephemeral_context")
             priority_value = force_action_section.get(f"{group_key}_priority")
 
             priority = priority_value.strip().lower()
             if priority not in {"low", "medium", "high", "critical"}:
-                self.print_line(f"Invalid priority in received force action {group_key}: {priority}", 0)
-                await self._run_serialized_bank_write(lambda: clear_force_action_section(self._bank_file_path))
-                continue
-
-            if any(action_name not in self._active_actions for action_name in action_names):
-                self.print_line(f"One or more action names in received force action are not in the list of active actions. \nActive actions: {sorted(self._active_actions)}. Force action actions: {action_names}", 0)
-                await self._run_serialized_bank_write(lambda: clear_force_action_section(self._bank_file_path))
-                continue
+                self.print_line(f"Invalid priority in received force action {group_key}: {priority}, using default 'low'", 0)
+                update = {f"{group_key}_priority": "low"}
+                try:
+                    await self._run_serialised_bank_write(lambda: write_bank_values(self._bank_file_path, update))
+                except Exception:
+                    self.print_line(f"Failed to write default priority value to bank file for {group_key}: {priority}", 0)
+                priority = "low"
 
             force_groups.append((action_names, query_value, state_value, ephemeral_value, priority))
-        
-        # For now Neuro can only process one action force at a time, so only send one and ignore the rest
-        if len(force_groups) > 1:
-            self.print_line(f"Received multiple force action groups at the same time. Sending {force_groups[0]} and ignoring the rest: {force_groups[1:]}", 0)
-            force_groups = [force_groups[0]]
-        
-        if force_groups:
-            if self._force_action_actions_to_use:
-                self.print_line(f"New force action command received but previous one has not been used. Ignoring this force action command: {force_groups}", 0)
-                return
-            self._force_action_actions_to_use = force_groups[0][0]
 
+        if not force_groups:
+            return
+        #   self.print_line(f"Received force action groups: {force_groups}", 2)
+
+        # The only active force action is already sent to Neuro
+        if self._active_force_groups and self._active_force_groups[0][0] == [group[0][0] for group in force_groups]:
+            # Neuro probably doesn't support updating force actions
+            # if self._active_force_groups != force_groups:
+            #     self.print_line(f"Updating existing active force action group with new values: {force_groups[0]}", 2)
+            #     try:
+            #         await self._send_neuro_force_actions(
+            #             query=force_groups[0][1],
+            #             action_names=force_groups[0][0],
+            #             state=force_groups[0][2],
+            #             ephemeral_context=force_groups[0][3],
+            #             priority=force_groups[0][4],
+            #         )
+            #     except Exception as exc:
+            #         self.print_line(f"Failed to update active force action group with new values: {exc}", 0)
+            return
+
+        # For now Neuro can only process one action force at a time, so only send one and ignore the rest
+        if self._active_force_groups and self._active_force_groups != force_groups:
+            self.print_line(f"Multiple force actions active at the same time. Neuro needs to use one of: {self._active_force_groups[0][0]}; Ignoring the rest for now: {[group for group in force_groups if group != self._active_force_groups[0]]}", 0)
+            return
+        
+        if not self._active_force_groups and len(force_groups) > 1:
+            self.print_line(f"Multiple force actions active at the same time. Sending {force_groups[0]} to Neuro and ignoring the rest for now: {force_groups[1:]}", 0)
+            force_groups = [force_groups[0]]
+
+        for action_names, query_value, state_value, ephemeral_value, priority in force_groups:
             try:
-                for action_names, query_value, state_value, ephemeral_value, priority in force_groups:
-                    try:
-                        await self._send_neuro_force_actions(
-                            query=query_value,
-                            action_names=action_names,
-                            state=state_value,
-                            ephemeral_context=ephemeral_value,
-                            priority=priority,
-                        )
-                        any_sent = True
-                    except Exception as exc:
-                        self.print_line(f"Failed to send force actions for {json.dumps(action_names)}: {exc}", 0)
-            finally:
-                if any_sent and self._bank_file_path is not None:
-                    try:
-                        await self._run_serialized_bank_write(lambda: clear_force_action_section(self._bank_file_path))
-                    except Exception as exc:
-                        self.print_line(f"Failed to clear force_action section in bank file: {exc}", 0)
+                await self._send_neuro_force_actions(
+                    query=query_value,
+                    action_names=action_names,
+                    state=state_value,
+                    ephemeral_context=ephemeral_value,
+                    priority=priority,
+                )
+            except Exception as exc:
+                self.print_line(f"Failed to send force actions for {action_names}: {exc}", 0)
+
+        self._active_force_groups = force_groups
 
     def _parse_force_action_group_names(self, group_key: str) -> list[str]:
         action_names: list[str] = []
@@ -1121,16 +1215,22 @@ class NeuroIntegrationRuntimeMixin:
             possible_actions_updates[f"{action_name}_uses"] = next_uses
             if next_uses == 0:
                 possible_actions_updates[f"{action_name}_active"] = False
+
         try:
-            await self._run_serialized_bank_write(lambda: write_bank_values(self._bank_file_path, updates))
+            await self._run_serialised_bank_write(lambda: write_bank_values(self._bank_file_path, updates))
         except (OSError, ET.ParseError, RuntimeError, ValueError) as exc:
             self.print_line(f"Failed to write queued action request to bank file: {exc}", 0)
             await self._send_neuro_context(f"Queued action could not be executed: {self._format_action_command_for_context(action_command)}.")
             return
         
-        # Allow new force action command
-        if action_name in self._force_action_actions_to_use:
-            self._force_action_actions_to_use = []
+        # Allow new action forces to be sent to Neuro
+        if self._active_force_groups and action_name in self._active_force_groups[0][0]:
+            try:
+                await self._run_serialised_bank_write(lambda: clear_force_action_group(self._bank_file_path, group_key=",".join(self._active_force_groups[0][0])))
+            except Exception as exc:
+                self.print_line(f"Failed to clear force action group after executing queued action: {exc}", 0)
+            finally:
+                self._active_force_groups = []
 
     def _is_sc2_running_sync(self) -> bool:
         try:
@@ -1223,7 +1323,7 @@ class NeuroIntegrationRuntimeMixin:
                 self.print_line(f"game_state.active watchdog error: {exc}", 0)
                 await asyncio.sleep(0.5)
 
-    async def _run_serialized_bank_write(self, write_operation: Callable[[], None]) -> None:
+    async def _run_serialised_bank_write(self, write_operation: Callable[[], None]) -> None:
         if self._bank_write_lock is None:
             write_operation()
             return
@@ -1233,7 +1333,7 @@ class NeuroIntegrationRuntimeMixin:
     
     async def _cleanup_communication(self) -> None:
         await self._unregister_all_active_actions()
-        self._force_action_actions_to_use = []
+        self._active_force_groups = []
         self._action_queue.clear()
         await self._notify_action_queue_state_changed()
 
@@ -1254,6 +1354,14 @@ class NeuroIntegrationRuntimeMixin:
             except asyncio.CancelledError:
                 pass
             self._bank_monitor_task = None
+
+        if self._backup_bank_monitor_task is not None:
+            self._backup_bank_monitor_task.cancel()
+            try:
+                await self._backup_bank_monitor_task
+            except asyncio.CancelledError:
+                pass
+            self._backup_bank_monitor_task = None
 
         if self._sc2_watchdog_task is not None:
             self._sc2_watchdog_task.cancel()
@@ -1286,20 +1394,23 @@ class NeuroIntegrationRuntimeMixin:
 
         await self._close_neuro_connection()
 
-        self._integration_task = None
-        self._integration_stop_event = None
-        self._bank_write_lock = None
         self._bank_file_path = None
         self._bank_change_queue = None
-        self._action_queue.clear()
-        self._active_actions = {}
+        self._bank_natural_event_counter = 0
+        self._backup_bank_id = None
+        self._last_backup_bank_id = None
+        self._last_parsed_bank_data = {}
         self._in_mission = None
-        self._bank_update_in_progress = False
-        self._action_queue_blocked_until = 0.0
         self._game_is_paused = False
+        self._game_is_blocking = False
         self._game_state_active_value = None
         self._last_game_state_active_value = 0
         self._game_state_active_last_changed_time = None
         self._game_state_active_timeout_handled_value = None
-        self._last_parsed_bank_data = {}
-        self._force_action_actions_to_use = []
+        self._active_force_groups = []
+        self._active_actions = {}
+        self._action_queue = deque()
+        self._action_queue_condition = asyncio.Condition()
+        self._action_queue_blocked_until = 0.0
+        self._bank_write_lock = None
+        self._bank_update_in_progress = False
