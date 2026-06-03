@@ -511,16 +511,16 @@ class NeuroIntegrationRuntimeMixin:
             self._game_is_blocking = new_is_blocking
         await self._notify_action_queue_state_changed()
 
+        if not self._in_mission:
+            return  # If not in mission, don't bother writing to bank file
+        
+        skip = await self._skip_if_unsafe_bank_write_window()
+        if skip:
+            return
+
         game_context = bank_data.get("game_context", {})
         possible_actions = bank_data.get("possible_actions", {})
         force_action = bank_data.get("force_action", {})
-        
-        if self._in_mission is True:
-            skip = await self._skip_if_unsafe_bank_write_window()
-            if skip:
-                return
-        else:
-            return  # If not in mission, don't bother writing to bank file
 
         self._bank_update_in_progress = True
         await self._notify_action_queue_state_changed()
