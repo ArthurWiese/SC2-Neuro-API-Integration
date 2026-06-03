@@ -30,7 +30,7 @@ class TerminalApp(NeuroIntegrationRuntimeMixin):
     ACCENT = "#4da3ff"
     ACCENT_SOFT = "#244a74"
     WARNING_COLOR = "#ff5555"
-    VERBOSITY = 1  # 0 = warning/error, 1 = info, 2 = verbose/debug
+    VERBOSITY = 1  # 0 = warning/error, 1 = info, 2 = verbose/debug, 3 = everything
     
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
@@ -370,7 +370,7 @@ class TerminalApp(NeuroIntegrationRuntimeMixin):
                     ("sc2_reconnect", "", "Reconnect to StarCraft II API"),
                     ("quit, exit", "", "Close the terminal window"),
                     ("listening_port", "int", "Configure the port that StarCraft II should listen on for API connections (default: 5000)"),
-                    ("verbosity", "0/1/2", "Set the verbosity of terminal output. 0 = warnings/errors, 1 = info, 2 = verbose/debug (default: 1)"),
+                    ("verbosity", "0/1/2/3", "Set the verbosity of terminal output. 0 = warnings/errors, 1 = info, 2 = verbose/debug, 3 = everything (default: 1)"),
                     ("protocol_help", "", "Show available protocol commands that can be sent to the SC2 API"),
                 ]
                 help_rows = sorted(help_rows, key=lambda x: x[0])
@@ -391,9 +391,9 @@ class TerminalApp(NeuroIntegrationRuntimeMixin):
             case "verbosity":
                 if not argument_text:
                     self.print_line(f"Current verbosity is at {self.VERBOSITY}", 1)
-                    return ["Error: verbosity command requires an argument. Usage: verbosity <0/1/2>"]
-                if argument_text not in {"0", "1", "2"}:
-                    return ["Error: verbosity must be 0, 1, or 2"]
+                    return ["Error: verbosity command requires an argument. Usage: verbosity <0/1/2/3>"]
+                if argument_text not in {"0", "1", "2", "3"}:
+                    return ["Error: verbosity must be 0, 1, 2, or 3"]
                 self.VERBOSITY = int(argument_text)
                 # Persist verbosity to configuration
                 try:
@@ -611,7 +611,7 @@ class TerminalApp(NeuroIntegrationRuntimeMixin):
                 if verbosity_cfg is not None:
                     try:
                         v = int(verbosity_cfg)
-                        if v in (0, 1, 2):
+                        if v in (0, 1, 2, 3):
                             self.VERBOSITY = v
                         else:
                             self.print_line("Error: verbosity in configuration invalid; expected 0/1/2", 0)

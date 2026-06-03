@@ -94,7 +94,7 @@ void libEFA54406_gf_create_action_3_arg (string lp_action_name, bool lp_action_a
     libEFA54406_gv_bankwriteallowed = true;
 }
 
-void libEFA54406_gf_create_force_action (string lp_action_names, string lp_state, string lp_query, bool lp_ephemeral_context, string lp_priority) {
+void libEFA54406_gf_create_force_action (string lp_force_action_name, string lp_actions, string lp_state, string lp_query, bool lp_ephemeral_context, string lp_priority) {
     // Automatic Variable Declarations
     // Implementation
     while ((libEFA54406_gv_bankwriteallowed == false)) {
@@ -103,10 +103,11 @@ void libEFA54406_gf_create_force_action (string lp_action_names, string lp_state
     libEFA54406_gv_bankwriteallowed = false;
     BankLoad("NeuroIntegration", 1);
     BankWait(BankLastCreated());
-    BankValueSetFromString(BankLastCreated(), "force_action", (lp_action_names + "_state"), lp_state);
-    BankValueSetFromString(BankLastCreated(), "force_action", (lp_action_names + "_query"), lp_query);
-    BankValueSetFromFlag(BankLastCreated(), "force_action", (lp_action_names + "_ephemeral_context"), lp_ephemeral_context);
-    BankValueSetFromString(BankLastCreated(), "force_action", (lp_action_names + "_priority"), lp_priority);
+    BankValueSetFromString(BankLastCreated(), "force_action", (lp_force_action_name + "_actions"), lp_actions);
+    BankValueSetFromString(BankLastCreated(), "force_action", (lp_force_action_name + "_state"), lp_state);
+    BankValueSetFromString(BankLastCreated(), "force_action", (lp_force_action_name + "_query"), lp_query);
+    BankValueSetFromFlag(BankLastCreated(), "force_action", (lp_force_action_name + "_ephemeral_context"), lp_ephemeral_context);
+    BankValueSetFromString(BankLastCreated(), "force_action", (lp_force_action_name + "_priority"), lp_priority);
     BankSave(BankLastCreated());
     libEFA54406_gv_bankwriteallowed = true;
 }

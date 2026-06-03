@@ -1188,6 +1188,7 @@
         <Parameter Type="Param" Id="8846B209"/>
         <Parameter Type="Param" Id="CF9CA28C"/>
         <Parameter Type="Param" Id="639E91D3"/>
+        <Parameter Type="Param" Id="885CA46B"/>
     </Element>
     <Element Type="Param" Id="32EF06DE">
         <ParameterDef Type="ParamDef" Library="EFA54406" Id="E9956746"/>
@@ -1212,6 +1213,11 @@
     <Element Type="Param" Id="639E91D3">
         <ParameterDef Type="ParamDef" Library="EFA54406" Id="DAD6123D"/>
         <Value>Decide if you want to make this mission harder or easier for the player. Send True to increase Raynor&apos;s max health by 50 hit points and False to decrease his max health by 50 hit points</Value>
+        <ValueType Type="string"/>
+    </Element>
+    <Element Type="Param" Id="885CA46B">
+        <ParameterDef Type="ParamDef" Library="EFA54406" Id="B9DD3905"/>
+        <Value>decide_raynor_max_health_force</Value>
         <ValueType Type="string"/>
     </Element>
     <Element Type="Variable" Id="ADCB0E71">

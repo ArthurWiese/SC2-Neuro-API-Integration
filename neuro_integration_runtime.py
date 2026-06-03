@@ -59,7 +59,7 @@ class NeuroIntegrationRuntimeMixin:
         self._last_game_state_active_value: int = 0
         self._game_state_active_last_changed_time: float | None = None
         self._game_state_active_timeout_handled_value: int | None = None
-        self._active_force_groups: list[tuple[list[str], str, str, bool, str]] = []
+        self._active_force_groups: list[dict[tuple[list[str], str, str, bool, str]]] = []
         self._active_actions: dict[str, dict[str, Any]] = {}
         self._action_queue: deque[dict[str, Any]] = deque()
         self._action_queue_condition: asyncio.Condition = asyncio.Condition()
@@ -278,7 +278,8 @@ class NeuroIntegrationRuntimeMixin:
                 if not backup_file.exists() or not backup_file.is_file():
                     await asyncio.sleep(0.1)
                     continue
-
+                
+                await asyncio.sleep(0.2)  # Wait for the game to finish writing the backup file
                 new_backup_name = backup_folder / f"NeuroIntegration_backup_{self._last_backup_bank_id}.SC2Bank"
                 try:
                     backup_file.rename(new_backup_name)
@@ -437,7 +438,7 @@ class NeuroIntegrationRuntimeMixin:
 
         if bank_data == self._last_parsed_bank_data:
             return
-        #   self.print_line("Bank file updated; parsed bank data: " + str(bank_data), 2)
+        self.print_line("Bank file updated; parsed bank data: " + str(bank_data), 3)
 
         self._last_parsed_bank_data = bank_data
 
@@ -543,12 +544,11 @@ class NeuroIntegrationRuntimeMixin:
         action_name = action_command.get("name")
         action_args = action_command.get("args")
 
-        arguments: list[str] = []
-        for argument_name in sorted(action_args):
-            argument_value = action_args[argument_name]
-            arguments.append(f"{argument_value}")
-
-        if arguments:
+        if action_args:
+            arguments: list[str] = []
+            for argument_name in sorted(action_args):
+                argument_value = action_args[argument_name]
+                arguments.append(f"{argument_value}")
             return f"{action_name} with argument/s: {', '.join(arguments)}. "
         else:
             return f"{action_name}"
@@ -821,16 +821,16 @@ class NeuroIntegrationRuntimeMixin:
         if not isinstance(force_action_section, dict):
             return
 
-        force_groups: list[tuple[list[str], str, str, bool, str]] = []
+        force_groups: list[dict[tuple[list[str], str, str, bool, str]]] = []
 
         for key, query_value in force_action_section.items():
             if not isinstance(key, str) or not key.endswith("_query"):
                 continue
 
             group_key = key[:-6]
-            action_names = self._parse_force_action_group_names(group_key)
-            if not action_names:
-                continue
+            action_names_raw = force_action_section.get(f"{group_key}_actions").split(",")
+            action_names = [name.strip() for name in action_names_raw]
+            action_names = sorted(list(set(action_names)))
 
             if any(action_name not in self._active_actions for action_name in action_names):
                 self.print_line(f"One or more action names in received force action are not in the list of active actions; removing force action. \nActive actions: {sorted(self._active_actions)}. Force action actions: {action_names}", 0)
@@ -851,39 +851,43 @@ class NeuroIntegrationRuntimeMixin:
                     self.print_line(f"Failed to write default priority value to bank file for {group_key}: {priority}", 0)
                 priority = "low"
 
-            force_groups.append((action_names, query_value, state_value, ephemeral_value, priority))
+            force_groups.append({group_key: (action_names, query_value, state_value, ephemeral_value, priority)})
 
         if not force_groups:
             return
-        #   self.print_line(f"Received force action groups: {force_groups}", 2)
+        self.print_line(f"Received force action groups: {force_groups}", 3)
+        self.print_line(f"Current active force action groups: {self._active_force_groups}", 3)
 
         # The only active force action is already sent to Neuro
-        if self._active_force_groups and self._active_force_groups[0][0] == [group[0][0] for group in force_groups]:
+        if self._active_force_groups and [self._active_force_groups[0].keys()] == [group.keys() for group in force_groups]:
             # Neuro probably doesn't support updating force actions
-            # if self._active_force_groups != force_groups:
-            #     self.print_line(f"Updating existing active force action group with new values: {force_groups[0]}", 2)
+            # if self._active_force_groups[0].values() != force_groups[0].values():
+            #     updated_force_group = force_groups[0].values()
+            #     self.print_line(f"Updating existing active force action group with new values: {updated_force_group}", 2)
             #     try:
             #         await self._send_neuro_force_actions(
-            #             query=force_groups[0][1],
-            #             action_names=force_groups[0][0],
-            #             state=force_groups[0][2],
-            #             ephemeral_context=force_groups[0][3],
-            #             priority=force_groups[0][4],
+            #             query=updated_force_group[1],
+            #             action_names=updated_force_group[0],
+            #             state=updated_force_group[2],
+            #             ephemeral_context=updated_force_group[3],
+            #             priority=updated_force_group[4],
             #         )
             #     except Exception as exc:
             #         self.print_line(f"Failed to update active force action group with new values: {exc}", 0)
+            #     self._active_force_groups = force_groups
             return
 
         # For now Neuro can only process one action force at a time, so only send one and ignore the rest
         if self._active_force_groups and self._active_force_groups != force_groups:
-            self.print_line(f"Multiple force actions active at the same time. Neuro needs to use one of: {self._active_force_groups[0][0]}; Ignoring the rest for now: {[group for group in force_groups if group != self._active_force_groups[0]]}", 0)
+            active_force_actions = [action_group[0] for action_group in self._active_force_groups[0].values()][0]
+            self.print_line(f"Multiple force actions active at the same time. Neuro needs to use one of: {active_force_actions}; Ignoring the rest for now: {[action_group for action_group in force_groups if action_group.keys() != self._active_force_groups[0].keys()]}", 0)
             return
         
         if not self._active_force_groups and len(force_groups) > 1:
             self.print_line(f"Multiple force actions active at the same time. Sending {force_groups[0]} to Neuro and ignoring the rest for now: {force_groups[1:]}", 0)
             force_groups = [force_groups[0]]
 
-        for action_names, query_value, state_value, ephemeral_value, priority in force_groups:
+        for action_names, query_value, state_value, ephemeral_value, priority in force_groups[0].values():
             try:
                 await self._send_neuro_force_actions(
                     query=query_value,
@@ -896,19 +900,6 @@ class NeuroIntegrationRuntimeMixin:
                 self.print_line(f"Failed to send force actions for {action_names}: {exc}", 0)
 
         self._active_force_groups = force_groups
-
-    def _parse_force_action_group_names(self, group_key: str) -> list[str]:
-        action_names: list[str] = []
-        seen: set[str] = set()
-
-        for raw_name in group_key.split(","):
-            action_name = raw_name.strip()
-            if not action_name or action_name in seen:
-                continue
-            seen.add(action_name)
-            action_names.append(action_name)
-
-        return action_names
     
     async def _listen_neuro_messages(self) -> None:
         if self._neuro_ws is None:
@@ -1224,12 +1215,13 @@ class NeuroIntegrationRuntimeMixin:
             return
         
         # Allow new action forces to be sent to Neuro
-        if self._active_force_groups and action_name in self._active_force_groups[0][0]:
+        if self._active_force_groups and action_name in list(self._active_force_groups[0].values())[0][0]:
             try:
-                await self._run_serialised_bank_write(lambda: clear_force_action_group(self._bank_file_path, group_key=",".join(self._active_force_groups[0][0])))
+                await self._run_serialised_bank_write(lambda: clear_force_action_group(self._bank_file_path, group_key=list(self._active_force_groups[0].keys())[0]))
             except Exception as exc:
                 self.print_line(f"Failed to clear force action group after executing queued action: {exc}", 0)
             finally:
+                await asyncio.sleep(0.5)
                 self._active_force_groups = []
 
     def _is_sc2_running_sync(self) -> bool:
@@ -1333,7 +1325,10 @@ class NeuroIntegrationRuntimeMixin:
     
     async def _cleanup_communication(self) -> None:
         await self._unregister_all_active_actions()
-        self._active_force_groups = []
+        if self._active_force_groups:
+            # HERE WOULD BE A DEREGISTER FOR FORCE ACTIONS IF NEURO SUPPORTED IT
+            # Relying on that unregistering all active actions will disable force actions
+            self._active_force_groups = []
         self._action_queue.clear()
         await self._notify_action_queue_state_changed()
 

@@ -434,7 +434,7 @@ bool gt_Raynormaxhealth_Func (bool testConds, bool runActions) {
     libNtve_gf_CreateDialogItemLabel(gv_raynormaxhealthdecision, 400, 200, c_anchorTopLeft, 50, 150, StringExternal("Param/Value/AB3CD232"), ColorWithAlpha(0,0,0,0), false, 2.0);
     Wait(6.0, c_timeReal);
     libEFA54406_gf_create_action_1_arg("decide_raynor_max_health", true, "Increases or reduces the max health of Raynor", "Bool", 1);
-    libEFA54406_gf_create_force_action("decide_raynor_max_health", "This is the first mission of the campaign and Raynor, the leader of the revolutionary group \"Raynor's Raiders\",  tries to take over a Dominion outpost on Mar Sara to try to kickstart a revolution on the planet ", "Decide if you want to make this mission harder or easier for the player. Send True to increase Raynor's max health by 50 hit points and False to decrease his max health by 50 hit points", false, "low");
+    libEFA54406_gf_create_force_action("decide_raynor_max_health_force", "decide_raynor_max_health", "This is the first mission of the campaign and Raynor, the leader of the revolutionary group \"Raynor's Raiders\",  tries to take over a Dominion outpost on Mar Sara to try to kickstart a revolution on the planet ", "Decide if you want to make this mission harder or easier for the player. Send True to increase Raynor's max health by 50 hit points and False to decrease his max health by 50 hit points", false, "low");
     return true;
 }
 
