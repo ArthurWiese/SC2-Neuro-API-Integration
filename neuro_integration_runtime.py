@@ -446,7 +446,6 @@ class NeuroIntegrationRuntimeMixin:
             return
         
         game_state = bank_data.get("game_state", {})
-        new_in_mission = game_state.get("in_mission", False)
 
         if not bank_data or "game_state" not in bank_data:
             self.print_line("Bank file is empty or incomplete.", 2)
@@ -462,6 +461,8 @@ class NeuroIntegrationRuntimeMixin:
         self.print_line("Bank file updated; parsed bank data: " + str(bank_data), 3)
 
         self._last_parsed_bank_data = bank_data
+
+        new_in_mission = game_state.get("in_mission", False)
 
         if new_in_mission:
             active_changed = self._record_game_state_active_value(game_state.get("active", 0))
@@ -542,9 +543,7 @@ class NeuroIntegrationRuntimeMixin:
             if elapsed_seconds < 0.3:
                 return False
             return True
-
-            # async with self._action_queue_condition:
-            #     await self._action_queue_condition.wait()
+        
         return False
     
     async def _clear_queue(self, game_state: dict[str, Any]) -> None:
