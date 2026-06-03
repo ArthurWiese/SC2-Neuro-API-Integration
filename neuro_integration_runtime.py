@@ -429,7 +429,6 @@ class NeuroIntegrationRuntimeMixin:
     async def _handle_bank_file_updated(self) -> None:
         if self._bank_file_path is None or not self._bank_file_path.exists():
             self._clear_game_state_active_watchdog_state()
-            self._game_is_paused = False
             await self._cleanup_communication()
             return
 
@@ -438,7 +437,6 @@ class NeuroIntegrationRuntimeMixin:
         except FileNotFoundError:
             self.print_line("Bank file was deleted; clearing active actions and action queue.", 0)
             self._clear_game_state_active_watchdog_state()
-            self._game_is_paused = False
             await self._cleanup_communication()
             return
         except ET.ParseError:
@@ -484,7 +482,6 @@ class NeuroIntegrationRuntimeMixin:
                     await self._send_neuro_context("Game is now unpaused.")
         else:
             self._clear_game_state_active_watchdog_state()
-            self._game_is_paused = False
             await self._cleanup_communication()
 
         if self._in_mission and not new_in_mission or self._in_mission is None and not new_in_mission:
@@ -1345,6 +1342,8 @@ class NeuroIntegrationRuntimeMixin:
     
     async def _cleanup_communication(self) -> None:
         await self._unregister_all_active_actions()
+        self._game_is_paused = False
+        self._game_is_blocking = False
         if self._active_force_groups:
             # HERE WOULD BE A DEREGISTER FOR FORCE ACTIONS IF NEURO SUPPORTED IT
             # Relying on that unregistering all active actions will disable force actions
