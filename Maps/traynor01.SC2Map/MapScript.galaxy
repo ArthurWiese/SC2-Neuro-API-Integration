@@ -162,8 +162,8 @@ void gf_OrderUnitToMoveThenTurnToTargetPointsFacing (unit lp_u, point lp_targetP
 //--------------------------------------------------------------------------------------------------
 // Trigger Variables
 //--------------------------------------------------------------------------------------------------
-trigger gt_Executeactions;
-trigger gt_Stopexecution;
+trigger gt_Executeactionsmap;
+trigger gt_Stopexecutionmap;
 trigger gt_Raynormaxhealthtrigger;
 trigger gt_Raynormaxhealth;
 trigger gt_Closedialog;
@@ -314,83 +314,68 @@ void gf_OrderUnitToMoveThenTurnToTargetPointsFacing (unit lp_u, point lp_targetP
 }
 
 //--------------------------------------------------------------------------------------------------
-// Trigger: Execute actions
+// Trigger: Execute actions map
 //--------------------------------------------------------------------------------------------------
-bool gt_Executeactions_Func (bool testConds, bool runActions) {
-    // Variable Declarations
-    bool lv_always_true;
-
+bool gt_Executeactionsmap_Func (bool testConds, bool runActions) {
     // Automatic Variable Declarations
-    // Variable Initialization
-    lv_always_true = true;
-
     // Actions
     if (!runActions) {
         return true;
     }
 
-    libEFA54406_gv_bankwriteallowed = false;
     BankLoad("NeuroIntegration", 1);
     BankWait(BankLastCreated());
-    while ((lv_always_true == true)) {
-        BankReload(BankLastCreated());
-        BankWait(BankLastCreated());
-        libEFA54406_gv_currentbankbackupid = BankValueGetAsInt(BankLastCreated(), "game_state", "backup_bank_id");
-        if ((BankValueGetAsFlag(BankLastCreated(), "do_action", "chat_message") == true)) {
-            UIDisplayMessage(PlayerGroupAll(), c_messageAreaSubtitle, (StringExternal("Param/Value/EED9936C") + StringToText(BankValueGetAsString(BankLastCreated(), "do_action", "chat_message_arg_1"))));
-            BankValueSetFromFlag(BankLastCreated(), "do_action", "chat_message", false);
+    if ((BankValueGetAsFlag(BankLastCreated(), "do_action", "decide_raynor_max_health") == true)) {
+        if ((BankValueGetAsFlag(BankLastCreated(), "do_action", "decide_raynor_max_health_arg_1") == true)) {
+            UnitSetPropertyFixed(gv_raynor, c_unitPropLifeMax, 250.0);
+            UIDisplayMessage(PlayerGroupAll(), c_messageAreaSubtitle, StringExternal("Param/Value/193F9419"));
         }
-
-        if ((BankValueGetAsFlag(BankLastCreated(), "do_action", "decide_raynor_max_health") == true)) {
-            if ((BankValueGetAsFlag(BankLastCreated(), "do_action", "decide_raynor_max_health_arg_1") == true)) {
-                UnitSetPropertyFixed(gv_raynor, c_unitPropLifeMax, 250.0);
-                UIDisplayMessage(PlayerGroupAll(), c_messageAreaSubtitle, StringExternal("Param/Value/193F9419"));
-            }
-            else {
-                UnitSetPropertyFixed(gv_raynor, c_unitPropLifeMax, 150.0);
-                UIDisplayMessage(PlayerGroupAll(), c_messageAreaSubtitle, StringExternal("Param/Value/8DE49B57"));
-            }
-            BankValueSetFromFlag(BankLastCreated(), "do_action", "decide_raynor_max_health", false);
-            DialogSetVisible(gv_raynormaxhealthdecision, PlayerGroupAll(), false);
+        else {
+            UnitSetPropertyFixed(gv_raynor, c_unitPropLifeMax, 150.0);
+            UIDisplayMessage(PlayerGroupAll(), c_messageAreaSubtitle, StringExternal("Param/Value/8DE49B57"));
         }
-
-        BankValueSetFromInt(BankLastCreated(), "game_state", "active", (BankValueGetAsInt(BankLastCreated(), "game_state", "active") + 1));
-        BankSave(BankLastCreated());
-        Wait(0.4, c_timeReal);
-        BankReload(BankLastCreated());
-        BankWait(BankLastCreated());
-        BankSave(BankLastCreated());
-        libEFA54406_gv_bankwriteallowed = true;
-        Wait(0.2, c_timeReal);
-        libEFA54406_gv_bankwriteallowed = false;
+        BankValueSetFromFlag(BankLastCreated(), "do_action", "decide_raynor_max_health", false);
+        DialogSetVisible(gv_raynormaxhealthdecision, PlayerGroupAll(), false);
     }
+
+    libEFA54406_gv_currentbankbackupid = BankValueGetAsInt(BankLastCreated(), "game_state", "backup_bank_id");
+    BankValueSetFromInt(BankLastCreated(), "game_state", "active", (BankValueGetAsInt(BankLastCreated(), "game_state", "active") + 1));
+    BankSave(BankLastCreated());
+    Wait(0.4, c_timeReal);
+    BankReload(BankLastCreated());
+    BankWait(BankLastCreated());
+    BankSave(BankLastCreated());
+    libEFA54406_gv_bankwriteallowed = true;
+    Wait(0.2, c_timeReal);
+    libEFA54406_gv_bankwriteallowed = false;
+    TriggerSendEvent("execute_actions_global");
     return true;
 }
 
 //--------------------------------------------------------------------------------------------------
-void gt_Executeactions_Init () {
-    gt_Executeactions = TriggerCreate("gt_Executeactions_Func");
-    TriggerAddEventGeneric(gt_Executeactions, "execute_actions");
+void gt_Executeactionsmap_Init () {
+    gt_Executeactionsmap = TriggerCreate("gt_Executeactionsmap_Func");
+    TriggerAddEventGeneric(gt_Executeactionsmap, "execute_actions_map");
 }
 
 //--------------------------------------------------------------------------------------------------
-// Trigger: Stop execution
+// Trigger: Stop execution map
 //--------------------------------------------------------------------------------------------------
-bool gt_Stopexecution_Func (bool testConds, bool runActions) {
+bool gt_Stopexecutionmap_Func (bool testConds, bool runActions) {
     // Automatic Variable Declarations
     // Actions
     if (!runActions) {
         return true;
     }
 
-    TriggerStop(gt_Executeactions);
+    TriggerStop(gt_Executeactionsmap);
     return true;
 }
 
 //--------------------------------------------------------------------------------------------------
-void gt_Stopexecution_Init () {
-    gt_Stopexecution = TriggerCreate("gt_Stopexecution_Func");
-    TriggerAddEventGeneric(gt_Stopexecution, "stop_execution");
+void gt_Stopexecutionmap_Init () {
+    gt_Stopexecutionmap = TriggerCreate("gt_Stopexecutionmap_Func");
+    TriggerAddEventGeneric(gt_Stopexecutionmap, "stop_execution");
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -6139,8 +6124,8 @@ void gt_VictoryRandomCheer_Init () {
 // Trigger Initialization
 //--------------------------------------------------------------------------------------------------
 void InitTriggers () {
-    gt_Executeactions_Init();
-    gt_Stopexecution_Init();
+    gt_Executeactionsmap_Init();
+    gt_Stopexecutionmap_Init();
     gt_Raynormaxhealthtrigger_Init();
     gt_Raynormaxhealth_Init();
     gt_Closedialog_Init();

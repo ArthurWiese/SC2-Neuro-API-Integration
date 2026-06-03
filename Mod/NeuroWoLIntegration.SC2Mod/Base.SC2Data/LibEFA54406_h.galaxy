@@ -18,6 +18,8 @@ void libEFA54406_gf_create_context (string lp_context_name, string lp_context, b
 void libEFA54406_gf_UnblockCommands (bool lp_clear_queue);
 
 // Trigger Declarations
+trigger libEFA54406_gt_Executeactionsglobal;
+trigger libEFA54406_gt_Stopexecutionglobal;
 trigger libEFA54406_gt_Playerchatmessage;
 trigger libEFA54406_gt_InitMap;
 trigger libEFA54406_gt_CreateNeuroIntegrationbank;
