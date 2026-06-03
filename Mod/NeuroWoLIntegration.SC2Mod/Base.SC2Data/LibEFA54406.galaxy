@@ -251,7 +251,6 @@ bool libEFA54406_gt_CleanUp_Func (bool testConds, bool runActions) {
         return true;
     }
 
-    TriggerSendEvent("stop_execution");
     TriggerExecute(libEFA54406_gt_CleanNeuroIntegrationbank, false, true);
     return true;
 }

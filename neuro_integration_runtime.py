@@ -257,6 +257,7 @@ class NeuroIntegrationRuntimeMixin:
 
     async def _monitor_backup_bank(self) -> None:
         expected_backup_number = 0
+        id_to_use = 0
         while self._integration_stop_event is not None and not self._integration_stop_event.is_set():
             try:
                 if self.banks_path is None or self._last_backup_bank_id is None:
@@ -278,9 +279,10 @@ class NeuroIntegrationRuntimeMixin:
                 if not backup_file.exists() or not backup_file.is_file():
                     await asyncio.sleep(0.1)
                     continue
+                id_to_use = self._last_backup_bank_id if self._last_backup_bank_id is not None else 1
                 
-                await asyncio.sleep(0.2)  # Wait for the game to finish writing the backup file
-                new_backup_name = backup_folder / f"NeuroIntegration_backup_{self._last_backup_bank_id}.SC2Bank"
+                await asyncio.sleep(0.1)  # Wait for the game to finish writing the backup file
+                new_backup_name = backup_folder / f"NeuroIntegration_backup_{id_to_use}.SC2Bank"
                 try:
                     backup_file.rename(new_backup_name)
                     self.print_line(f"Renamed backup bank file to {new_backup_name.name}.", 2)
@@ -289,6 +291,25 @@ class NeuroIntegrationRuntimeMixin:
                 except OSError as exc:
                     self.print_line(f"Failed to rename backup bank file: {exc}", 0)
 
+                # Manually copy to backup if game fails to create correct backup file
+                try:
+                    bank_data = parse_bank_file(new_backup_name)
+                except (FileNotFoundError, ET.ParseError):
+                    self.print_line("Backup bank file is missing or corrupted after creation; attempting manual copy from main bank file.", 2)
+                    try:
+                        new_backup_name.write_text(self._bank_file_path.read_text())
+                    except Exception as exc:
+                        self.print_line(f"Failed to manually copy bank file to backup: {exc}", 0)
+                    await asyncio.sleep(0.1)
+                    continue
+
+                if not bank_data or "game_state" not in bank_data:
+                    self.print_line("Backup bank file is missing or corrupted after creation; attempting manual copy from main bank file.", 2)
+                    try:
+                        new_backup_name.write_text(self._bank_file_path.read_text())
+                    except Exception as exc:
+                        self.print_line(f"Failed to manually copy bank file to backup: {exc}", 0)
+                
                 await asyncio.sleep(0.1)
             except asyncio.CancelledError:
                 break

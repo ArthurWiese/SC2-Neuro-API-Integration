@@ -2515,7 +2515,6 @@
         </Element>
         <Element Type="Trigger" Id="A5AD3878">
             <Event Type="FunctionCall" Library="EFA54406" Id="E12CA81B"/>
-            <Action Type="FunctionCall" Library="EFA54406" Id="B81E3A03"/>
             <Action Type="FunctionCall" Library="EFA54406" Id="7EB58BAB"/>
         </Element>
         <Element Type="FunctionCall" Id="E12CA81B">
@@ -2531,15 +2530,6 @@
         <Element Type="Param" Id="E18F7D9B">
             <ParameterDef Type="ParamDef" Library="Ntve" Id="8B6C7FC6"/>
             <Preset Type="PresetValue" Library="Ntve" Id="02AFA33B"/>
-        </Element>
-        <Element Type="FunctionCall" Id="B81E3A03">
-            <FunctionDef Type="FunctionDef" Library="Ntve" Id="9B76E7C9"/>
-            <Parameter Type="Param" Library="EFA54406" Id="27F4E77D"/>
-        </Element>
-        <Element Type="Param" Id="27F4E77D">
-            <ParameterDef Type="ParamDef" Library="Ntve" Id="EFE9F3E0"/>
-            <Value>stop_execution</Value>
-            <ValueType Type="string"/>
         </Element>
         <Element Type="FunctionCall" Id="7EB58BAB">
             <FunctionDef Type="FunctionDef" Library="Ntve" Id="00000116"/>
