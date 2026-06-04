@@ -642,7 +642,7 @@ class NeuroIntegrationRuntimeMixin:
 
             if uses == 0:
                 if action_name in self._active_actions:
-                    self.print_line(f"Active action '{action_name}' has 0 uses; removing it from active actions.", 0)
+                    self.print_line(f"Active action '{action_name}' has 0 uses; removing it from active actions.", 2)
                 continue
 
             desc_uses = ""
