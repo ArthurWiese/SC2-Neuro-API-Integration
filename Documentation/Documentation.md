@@ -12,7 +12,7 @@ The integration searches and works with the bank file named "NeuroIntegration.SC
 
 The integration can be started at any time and even works with saves and loads.
 
-## Structure of the integration in SC 2
+## Structure of the integration in SC2
 All .SC2Map files that use the Neuro API integration have a dependency to a .SC2Mod file. 
 
 <img src="ModFileOverview.jpg">
@@ -85,6 +85,8 @@ This template is used to create a context command for Neuro.
 - context: Context to send to Neuro
 - silent: If True, the message will be added to Neuro's context without prompting her to respond to it. If False, Neuro might respond to the message directly, unless she is busy talking to someone else or to chat.
 
+***
+
 ### Example force action: "decide_raynor_max_health"
 Example of a force action from the demo map.
 
@@ -111,6 +113,8 @@ Prevent the trigger to be activated again.
 In the local execution loop handle the response from Neuro.
 
 </details>
+
+***
 
 ### Block / Unblock Commands
 <img src="BlockCommands.jpg">
