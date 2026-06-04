@@ -8,7 +8,7 @@ The job of the integration is to convert values in the bank file into messages t
 
 The integration recognises when a mission is active, if the game is currently in an intermission, when the game is paused and when the game is blocking commands to be written to the bank file. When the game is paused or blocking, the sent action commands will get added to a queue to be written to the file when unpaused/unblocked. Max queue size is 3 action commands, new commands will remove older commands.
 
-The integration searches and works with the bank file named "NeuroIntegration.SC2Bank".
+The integration searches and works with the bank file named "NeuroIntegration.SC2Bank" at ...\Documents\StarCraft II\Accounts\...\...\Banks.
 
 The integration can be started at any time and even works with saves and loads.
 
@@ -17,16 +17,19 @@ All .SC2Map files that use the Neuro API integration have a dependency to a .SC2
 
 <img src="ModFileOverview.jpg">
 This .SC2Mod file contains:
-- Templates to create action commands, action force commands and context commands
-- Triggers shared by all maps to make the integration work, among others the global part of the execution loop
-- Global variables to coordinate writes from the game and the backup bank id to be used when the game and loaded
+
+ - Templates to create action commands, action force commands and context commands
+ - Triggers shared by all maps to make the integration work, among others the global part of the execution loop
+ - Global variables to coordinate writes from the game and the backup bank id to be used when the game is loaded
 
 <img src="MapFileOverview.jpg">
 Every .SC2Map file that uses the integration must also contain:
+
 - Local part of the execution loop
 
 ### Execution loop
 <img src="ExecutionLoopGlobal.jpg">
+
 <img src="ExecutionLoopMap.jpg">
 
 These two triggers periodically check the "do_action" section of the bank file for things to do. Once initiated they will endlessly ping-pong between each other.
@@ -38,9 +41,9 @@ Step-by-step:
 - Deal with all actions defined on a global level
 - Call the local part of the execution loop
 - Deal with all actions defined on a local level
-- Store the updated bank backup id that the integration wrote to the bank file. This id will be used by the game to load the correct bank backup when it is loaded.
-- Update the "active" value and save all changes made to the bank file. This is the signal for the integration that the game is not paused and also opens the write window for the integration to the bank file.
-- Save changes made to the bank file by the integration and open a write window for the game to write to the bank file before calling the global part of the execution loop.
+- Store the updated bank backup id that the integration wrote to the bank file. This id will be used by the game to load the correct bank backup when it is loaded
+- Update the "active" value and save all changes made to the bank file. This is the signal for the integration that the game is not paused and also opens the write window for the integration to the bank file
+- Save changes made to the bank file by the integration and open a write window for the game to write to the bank file before calling the global part of the execution loop and repeat
 
 When the game is paused this loop will get frozen which leads to the "active" value not being updated and the integration noticing that the game is paused.
 
@@ -95,6 +98,7 @@ Example of a force action from the demo map.
 Prevent the trigger to be activated again.
 
 <img src="Raynor.jpg">
+
 <img src="CloseDialog.jpg">
 
 - First some info for the player, so they understand what the force action is about
@@ -126,10 +130,11 @@ These triggers are necessary for the functionality of the integration and work i
 
 <details>
 <summary>Background triggers</summary>
+
 ### Init Map
 <img src="InitMap.jpg">
 
-Initialisesthe NeuroIntegration bank file and start the execution loop when a map is started
+Initialises the NeuroIntegration bank file and start the execution loop when a map is started
 
 ### Create NeuroIntegration Bank
 <img src="CreateNeuroIntegrationBank.jpg">
@@ -149,6 +154,7 @@ Disable achievements at the start of a mission because this is a modded campaign
 
 ### Clean NeuroIntegration bank
 <img src="CleanUp.jpg">
+
 <img src="CleanNeuroIntegrationBank.jpg">
 
 Clean up the bank file and set "in_mission" to False, this is the signal for the integration that the mission ended.
@@ -164,7 +170,7 @@ The integration can deal with all these cases.
 <img src="StopExecutionGlobal.jpg">
 <img src="StopExecutionMap.jpg">
 
-Stop the global and local execution loop. (Hopefully no interference when loading a backup bank file)
+Stop the global and local execution loop.
 
 ### Save Backup
 <img src="SaveBackupBankInit.jpg">
