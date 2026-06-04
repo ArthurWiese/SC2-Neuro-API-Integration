@@ -440,7 +440,7 @@ class NeuroIntegrationRuntimeMixin:
             await self._cleanup_communication()
             return
         except ET.ParseError:
-            self.print_line("Bank parse failed on file change; retrying on the next change event.", 2)
+            self.print_line("Bank parse failed on file change; retrying on the next change event.", 3)
             return
         
         game_state = bank_data.get("game_state", {})
@@ -598,7 +598,7 @@ class NeuroIntegrationRuntimeMixin:
                 self.print_line(f"Failed to send game context to Neuro: {exc}", 0)
 
     async def _sync_possible_actions(self, possible_actions_section: dict[str, Any]) -> None:
-        extracted_actions = self._extract_actions(possible_actions_section)
+        extracted_actions = await self._extract_actions(possible_actions_section)
         latest_actions = {action["name"]: action for action in extracted_actions}
 
         current_names = set(self._active_actions.keys())
@@ -609,17 +609,7 @@ class NeuroIntegrationRuntimeMixin:
         changed_names = sorted(name for name in latest_names & current_names if self._active_actions.get(name) != latest_actions[name])
 
         if missing_names:
-            await self._send_neuro_unregister_actions(missing_names)
-            queue_actions_removed = [action for action in self._action_queue if action.get("name") in missing_names]
-            if queue_actions_removed:
-                summary = ""
-                for removed in queue_actions_removed:
-                    summary += self._format_action_command_for_context(removed)
-                self.print_line(f"Removing queued actions due to them being unregistered: {summary}", 2)
-                await self._send_neuro_context(f"Removing queued actions due to them being unregistered: {summary}")
-                self._action_queue = deque(action for action in self._action_queue if action.get("name") not in missing_names)
-            for name in missing_names:
-                self._active_actions.pop(name, None)
+            await self._unregister_actions(missing_names)
 
         names_to_register = new_names + [name for name in changed_names if name not in new_names]
         if names_to_register:
@@ -631,7 +621,7 @@ class NeuroIntegrationRuntimeMixin:
         for name in latest_names & current_names:
             self._active_actions[name] = latest_actions[name]
 
-    def _extract_actions(self, possible_actions: dict[str, Any]) -> list[dict[str, Any]]:
+    async def _extract_actions(self, possible_actions: dict[str, Any]) -> list[dict[str, Any]]:
         action_names: set[str] = set()
         for key in possible_actions:
             if key.endswith("_active"):
@@ -651,10 +641,17 @@ class NeuroIntegrationRuntimeMixin:
                 continue
 
             if uses == 0:
-                self.print_line(f"Active action '{action_name}' has 0 uses; removing it from active actions.", 0)
+                if action_name in self._active_actions:
+                    self.print_line(f"Active action '{action_name}' has 0 uses; removing it from active actions.", 0)
                 continue
 
-            description = self._extract_action_description(possible_actions.get(f"{action_name}_description"), action_name)
+            desc_uses = ""
+            if uses == 1:
+                desc_uses = "; This action can only be used once."
+            elif uses > 1:
+                desc_uses = f"; This action can be used {uses} times."
+
+            description = self._extract_action_description(possible_actions.get(f"{action_name}_description"), action_name) + desc_uses
             schema = self._build_action_schema(action_name, possible_actions)
 
             action_data: dict[str, Any] = {
@@ -664,6 +661,14 @@ class NeuroIntegrationRuntimeMixin:
             }
             if schema:
                 action_data["schema"] = schema
+            
+            # Active action gets updated
+            if action_name in self._active_actions and self._active_actions[action_name] != action_data:
+                self.print_line(f"Active action '{action_name}' has changed. Old data: {self._active_actions[action_name]}, new data: {action_data}", 2)
+                await self._unregister_actions([action_name])
+
+                # The unregister action could get to Neuro after the registration
+                await asyncio.sleep(0.05)
 
             actions.append(action_data)
 
@@ -794,12 +799,25 @@ class NeuroIntegrationRuntimeMixin:
         self.print_line("Integration -> Neuro: Unregister actions command.", 2)
         self.print_line(f"Unregistered actions: {json.dumps(action_names)}", 2)
 
+    async def _unregister_actions(self, action_names: list[str]) -> None:
+        await self._send_neuro_unregister_actions(action_names)
+        queue_actions_removed = [action for action in self._action_queue if action.get("name") in action_names]
+        if queue_actions_removed:
+            summary = ""
+            for removed in queue_actions_removed:
+                summary += self._format_action_command_for_context(removed)
+            self.print_line(f"Removing queued actions due to them being unregistered: {summary}", 2)
+            await self._send_neuro_context(f"Removing queued actions due to them being unregistered: {summary}")
+            self._action_queue = deque(action for action in self._action_queue if action.get("name") not in action_names)
+        for name in action_names:
+            self._active_actions.pop(name, None)
+
     async def _unregister_all_active_actions(self) -> None:
         if not self._active_actions:
             return
 
         action_names = sorted(self._active_actions)
-        await self._send_neuro_unregister_actions(action_names)
+        await self._unregister_actions(action_names)
         self._active_actions.clear()
 
     async def _send_neuro_force_actions(
@@ -1216,8 +1234,9 @@ class NeuroIntegrationRuntimeMixin:
             return
 
         current_uses = int(action_definition.get("uses"))
+        next_uses = 0
 
-        if current_uses >= 0:
+        if current_uses > 0:
             next_uses = current_uses - 1
             possible_actions_updates = updates.setdefault("possible_actions", {})
             possible_actions_updates[f"{action_name}_uses"] = next_uses
@@ -1226,6 +1245,17 @@ class NeuroIntegrationRuntimeMixin:
 
         try:
             await self._run_serialised_bank_write(lambda: write_bank_values(self._bank_file_path, updates))
+            # This here is a choice between sending context with the updated uses but not updating the uses count in the description of the action 
+            # or unregistering and re-registering the action with the updated uses count in the description
+            #
+            # Update the local cache of active actions uses count after successful bank write so it will not be recognised as changed and trigger a redundant re-registration
+            self._active_actions[action_name]["uses"] = next_uses
+            if next_uses == 1:
+                await self._send_neuro_context(f"Action '{action_name}' can only be used one more time.")
+                self._active_actions[action_name]["description"] = self._active_actions[action_name]["description"].replace(f"; This action can be used {current_uses} times.", "; This action can only be used once.")
+            elif next_uses > 1:
+                await self._send_neuro_context(f"Action '{action_name}' can be used {next_uses} more times.")
+                self._active_actions[action_name]["description"] = self._active_actions[action_name]["description"].replace(f"; This action can be used {current_uses} times.", f"; This action can be used {next_uses} times.")
         except (OSError, ET.ParseError, RuntimeError, ValueError) as exc:
             self.print_line(f"Failed to write queued action request to bank file: {exc}", 0)
             await self._send_neuro_context(f"Queued action could not be executed: {self._format_action_command_for_context(action_command)}.")
@@ -1342,14 +1372,14 @@ class NeuroIntegrationRuntimeMixin:
     
     async def _cleanup_communication(self) -> None:
         await self._unregister_all_active_actions()
-        self._game_is_paused = False
-        self._game_is_blocking = False
         if self._active_force_groups:
             # HERE WOULD BE A DEREGISTER FOR FORCE ACTIONS IF NEURO SUPPORTED IT
             # Relying on that unregistering all active actions will disable force actions
             self._active_force_groups = []
         self._action_queue.clear()
         await self._notify_action_queue_state_changed()
+        self._game_is_paused = False
+        self._game_is_blocking = False
 
     async def _cleanup_bank_file(self) -> None:
         if self._bank_file_path is not None:
