@@ -1,0 +1,4 @@
+﻿DocInfo/DescLong=Integrates Neuro Sama API into maps
+DocInfo/DescShort=1... kinda
+DocInfo/Name=Neuro Integration
+Param/Value/lib_EFA54406_C2045735=<c val="FF80C0">Neuro</c>: 
