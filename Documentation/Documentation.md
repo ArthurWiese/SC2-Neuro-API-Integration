@@ -163,7 +163,7 @@ Disable achievements at the start of a mission because this is a modded campaign
 
 Clean up the bank file and set "in_mission" to False, this is the signal for the integration that the mission ended.
 
-For some reason the game has problems writing to the bank file when the mission closes which leads to different outcomes for the bank file:
+The game has problems writing to the bank file when the mission closes which leads to different outcomes for the bank file:
 - This works as intended and all but the "game_state" section is removed and "in_mission" = False
 - The bank file is deleted and then only the entry "in_mission" = False is created
 - The bank file is empty / doesn't exist anymore
@@ -195,5 +195,6 @@ Everytime a player sends a message into chat, send a context command to Neuro.
 
 ## Some notes
 - Despite all efforts there might still be rare cases where the bank file or the backup bank file is not in a state that it should be in, leading to unintended behaviour. Restarting the mission should reset everything
-- An edge case is where a force action is active and then a save is loaded where a force action is also currently active. When loading the integration will deregister all actions from Neuro but it is not clear if this will also remove an action force associated with a deregistered action. If not, upon loading this will lead to an action force to be issued and there will be two action forces active with Neuro at the same time
+- An edge case is where a force action is active and then a save is loaded. When loading the integration will deregister all actions from Neuro but it is not clear if this will also remove a force action associated with a deregistered action. If not, upon loading this will lead to a force action being active with possibly no action to use and if the loaded game also has an active force action then this will cause Neuro to have two force actions at the same time
+- to be issued and there will be two action forces active with Neuro at the same time
 - When the game launches it will load the state of the NeuroIntegration bank file before it was shutdown, leading to the possibility that "in_mission" is true and actions being active while not in a mission. Because the "active" value does not get updated, the integration will recognise the mission as being paused. Neuro can send actions to a queue but they will never be actually executed. There is no way for the integration to differentiate between being paused in the menu screen or during a mission
