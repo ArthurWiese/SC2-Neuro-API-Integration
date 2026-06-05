@@ -55,7 +55,7 @@ class NeuroIntegrationRuntimeMixin:
         self._in_mission: bool | None = None
         self._game_is_paused: bool = False
         self._game_is_blocking: bool = False
-        self._game_state_active_value: int | None = None
+        self._game_state_active_value: int = 0
         self._last_game_state_active_value: int = 0
         self._game_state_active_last_changed_time: float | None = None
         self._game_state_active_timeout_handled_value: int | None = None
@@ -451,7 +451,7 @@ class NeuroIntegrationRuntimeMixin:
             if self._in_mission:
                 self._in_mission = False
                 await self._cleanup_communication()
-                await self._send_neuro_context("Entered intermission; game cannot process commands until the next mission starts.")
+                await self._send_neuro_context("The mission has ended; game cannot process commands until the next mission starts.")
             return
 
         if bank_data == self._last_parsed_bank_data:
@@ -486,13 +486,11 @@ class NeuroIntegrationRuntimeMixin:
 
         if self._in_mission and not new_in_mission or self._in_mission is None and not new_in_mission:
             self._in_mission = False
-            await self._send_neuro_context("Entered intermission; game cannot process commands until the next mission starts.")
+            await self._send_neuro_context("The mission has ended; game cannot process commands until the next mission starts.")
             return
         elif not self._in_mission and new_in_mission or self._in_mission is None and new_in_mission:
-            if self._game_state_active_value == 0 or self._game_state_active_value >= self._last_game_state_active_value:
-                # The game is playing tricks on you if this is anything other than 0 at start of mission
-                self._in_mission = True
-                await self._send_neuro_context("Entered mission; game can now process commands.")
+            self._in_mission = True
+            await self._send_neuro_context("Entered mission; game can now process commands.")
 
         new_is_blocking = game_state.get("is_blocking", False)
 
@@ -1314,7 +1312,9 @@ class NeuroIntegrationRuntimeMixin:
     def _record_game_state_active_value(self, active_value: int) -> bool:
         loop = asyncio.get_running_loop()
         current_time = loop.time()
-        if self._game_state_active_value != active_value:
+        # active_value is default 0 and at start of mission 0. The integration only recognises the game as paused/unpaused if the execution loop has started.
+        # (Cutscene at the start of mission doesn't give context "Game is paused/unpaused")
+        if self._game_state_active_value != active_value and active_value != 0:
             if self._game_state_active_value is None:
                 self._last_game_state_active_value = int(0)
             else:
@@ -1324,8 +1324,6 @@ class NeuroIntegrationRuntimeMixin:
             self._game_state_active_timeout_handled_value = None
             return True
 
-        if self._game_state_active_last_changed_time is None:
-            self._game_state_active_last_changed_time = current_time
         return False
 
     def _clear_game_state_active_watchdog_state(self) -> None:
