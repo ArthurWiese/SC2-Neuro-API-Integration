@@ -1249,7 +1249,8 @@ class NeuroIntegrationRuntimeMixin:
             # or unregistering and re-registering the action with the updated uses count in the description
             #
             # Update the local cache of active actions uses count after successful bank write so it will not be recognised as changed and trigger a redundant re-registration
-            self._active_actions[action_name]["uses"] = next_uses
+            if next_uses >= 0:
+                self._active_actions[action_name]["uses"] = next_uses
             if next_uses == 1:
                 await self._send_neuro_context(f"Action '{action_name}' can only be used one more time.")
                 self._active_actions[action_name]["description"] = self._active_actions[action_name]["description"].replace(f"; This action can be used {current_uses} times.", "; This action can only be used once.")
