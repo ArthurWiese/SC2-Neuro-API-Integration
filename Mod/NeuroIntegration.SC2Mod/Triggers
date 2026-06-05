@@ -2415,7 +2415,6 @@
             <ValueType Type="string"/>
         </Element>
         <Element Type="Trigger" Id="B82C7FBD">
-            <Action Type="Comment" Library="EFA54406" Id="2B6D771F"/>
             <Action Type="FunctionCall" Library="EFA54406" Id="90046B42"/>
             <Action Type="FunctionCall" Library="EFA54406" Id="86BA9896"/>
             <Action Type="FunctionCall" Library="EFA54406" Id="E9ED4A25"/>
@@ -2427,17 +2426,13 @@
             <Action Type="FunctionCall" Library="EFA54406" Id="BB2B4E26"/>
             <Action Type="Comment" Library="EFA54406" Id="45DDD1B8"/>
             <Action Type="FunctionCall" Library="EFA54406" Id="8FE7419A"/>
+            <Action Type="Comment" Library="EFA54406" Id="61435072"/>
             <Action Type="FunctionCall" Library="EFA54406" Id="61585BDB"/>
             <Action Type="FunctionCall" Library="EFA54406" Id="9E36738C"/>
             <Action Type="FunctionCall" Library="EFA54406" Id="2CE2BAB4"/>
             <Action Type="FunctionCall" Library="EFA54406" Id="E52BC616"/>
             <Action Type="Comment" Library="EFA54406" Id="9EDE7F62"/>
             <Action Type="FunctionCall" Library="EFA54406" Id="B6B66CCB"/>
-        </Element>
-        <Element Type="Comment" Id="2B6D771F">
-            <Comment>
-                General state of the game
-            </Comment>
         </Element>
         <Element Type="FunctionCall" Id="90046B42">
             <FunctionDef Type="FunctionDef" Library="Ntve" Id="00000292"/>
@@ -2568,6 +2563,11 @@
             <ParameterDef Type="ParamDef" Library="Ntve" Id="00000503"/>
             <Value>force_action</Value>
             <ValueType Type="string"/>
+        </Element>
+        <Element Type="Comment" Id="61435072">
+            <Comment>
+                State of game
+            </Comment>
         </Element>
         <Element Type="FunctionCall" Id="61585BDB">
             <FunctionDef Type="FunctionDef" Library="Ntve" Id="00000298"/>
