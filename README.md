@@ -1,4 +1,4 @@
-# SC2 Neuro API Integration - WIP
+# SC2 Neuro API Integration
 An integration of the [Neuro API](https://github.com/VedalAI/neuro-sdk) for StarCraft 2
 
 In the [Mod](Mod) and [Maps](Maps) folders is a demo for the implementation of the Neuro API in the first Mission of the Wings of Liberty campaign
@@ -8,11 +8,13 @@ Tested with [Gary](https://github.com/Govorunb/gary)
 Please report any issues and give feedback in the [Neuro-sama Discord]() under projects/SC2 Neuro WoL Integration or DM me
 
 ## What I want to use this integration for
-My goal is to create a custom Wings of Liberty campaign experience where Neuro gets context, triggers effects in the game and selects, gains and uses permanent abilities over the course of the campaign
+My goal is to create a custom Wings of Liberty campaign experience where Neuro gets context, triggers effects in the game and selects, gains and uses permanent abilities over the course of the campaign and navigates through intermissions herself:
 
-For proposing ideas and current progress see [SC2 Neuro WoL Integration plan]()
+[SC2 Neuro WoL Integration](https://github.com/ArthurWiese/SC2-Neuro-WoL-Integration)
 
-If you want to contribute to the SC2 Neuro WoL Integration also see [Neuro-sama Discord]() under projects/SC2 Neuro WoL Integration
+For proposing ideas and current progress see [SC2 Neuro WoL Integration plan]().
+
+If you want to contribute to the SC2 Neuro WoL Integration see [Neuro-sama Discord]() under projects/SC2 Neuro WoL Integration and tell me your Github account name or DM me and I will add you to the repo.
 
 ## Getting started
 Note: Should only work on Windows for now (Because of file paths, etc...)
