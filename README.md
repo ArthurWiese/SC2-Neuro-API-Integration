@@ -12,7 +12,7 @@ My goal is to create a custom Wings of Liberty campaign experience where Neuro g
 
 [SC2 Neuro WoL Integration](https://github.com/ArthurWiese/SC2-Neuro-WoL-Integration)
 
-For proposing ideas and current progress see [SC2 Neuro WoL Integration plan]()
+For proposing ideas and current progress see [SC2 Neuro WoL Integration plan](https://docs.google.com/spreadsheets/d/1aMBb_p_7_Iz50ajwpbP28pfU4uuB_lrLls13Mwx0Uxs/edit?usp=sharing)
 
 If you want to contribute to the SC2 Neuro WoL Integration see [Neuro-sama Discord]() under projects/SC2 Neuro WoL Integration and tell me your Github account name or DM me and I will add you to the repo
 
