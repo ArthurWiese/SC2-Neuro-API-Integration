@@ -5,7 +5,7 @@ In the [Mod](Mod) and [Maps](Maps) folders is a demo for the implementation of t
 
 Tested with [Gary](https://github.com/Govorunb/gary)
 
-Please report any issues and give feedback in the [Neuro-sama Discord]() under projects/SC2 Neuro WoL Integration or DM me
+Please report any issues and give feedback in the [Neuro-sama Discord](https://discord.gg/5wbaxeAbQG) under Neuro-sama/projects/SC2 Neuro WoL Integration or DM me
 
 ## What I want to use this integration for
 My goal is to create a custom Wings of Liberty campaign experience where Neuro gets context, triggers effects in the game and selects, gains and uses permanent abilities over the course of the campaign and navigates through intermissions herself:
@@ -14,7 +14,7 @@ My goal is to create a custom Wings of Liberty campaign experience where Neuro g
 
 For proposing ideas and current progress see [SC2 Neuro WoL Integration plan](https://docs.google.com/spreadsheets/d/1aMBb_p_7_Iz50ajwpbP28pfU4uuB_lrLls13Mwx0Uxs/edit?usp=sharing)
 
-If you want to contribute to the SC2 Neuro WoL Integration see [Neuro-sama Discord]() under projects/SC2 Neuro WoL Integration and tell me your Github account name or DM me and I will add you to the repo
+If you want to contribute to the SC2 Neuro WoL Integration see [Neuro-sama Discord](https://discord.gg/5wbaxeAbQG) under Neuro-sama/projects/SC2 Neuro WoL Integration and tell me your Github account name or DM me and I will add you to the repo
 
 ## Getting started
 Note: Should only work on Windows for now (Because of file paths, etc...)
