@@ -727,14 +727,16 @@ class NeuroIntegrationRuntimeMixin:
             if not lower_raw or not upper_raw:  # This should not be possible
                 self.print_line(f"No lower or upper bound specified for ranged type in action argument expected type: {expected_type!r}. Range constraints will be ignored.", 0)
                 return schema
-            if not isinstance(lower_raw, (int, float)) or not isinstance(upper_raw, (int, float)):
+            if not bool(re.fullmatch(r"^-?\d+(\.\d+)?$", lower_raw)) or not bool(re.fullmatch(r"^-?\d+(\.\d+)?$", upper_raw)):
                 self.print_line(f"Invalid bounds specified for ranged type in action argument expected type: {expected_type!r}. Range constraints will be ignored.", 0)
                 return schema
-            if lower_raw > upper_raw:
+            lower = float(lower_raw) if schema_type == "number" else int(lower_raw)
+            upper = float(upper_raw) if schema_type == "number" else int(upper_raw)
+            if lower > upper:
                 self.print_line(f"Lower bound is greater than upper bound for ranged type in action argument expected type: {expected_type!r}. Range constraints will be ignored.", 0)
                 return schema
-            schema["minimum"] = int(lower_raw) if schema_type == "integer" else float(lower_raw)
-            schema["maximum"] = int(upper_raw) if schema_type == "integer" else float(upper_raw)
+            schema["minimum"] = lower
+            schema["maximum"] = upper
             return schema
 
         enum_match = re.fullmatch(r"string\((.+?)\)", type_raw, re.IGNORECASE)
