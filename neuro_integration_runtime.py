@@ -1239,7 +1239,7 @@ class NeuroIntegrationRuntimeMixin:
             return
 
         current_uses = int(action_definition.get("uses"))
-        next_uses = 0
+        next_uses = -1
 
         if current_uses > 0:
             next_uses = current_uses - 1
