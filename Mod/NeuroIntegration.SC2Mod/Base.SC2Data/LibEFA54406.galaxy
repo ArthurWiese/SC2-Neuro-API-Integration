@@ -578,33 +578,6 @@ void libEFA54406_gt_ClearQueue_Init () {
 }
 
 //--------------------------------------------------------------------------------------------------
-// Trigger: Clear Queue 2
-//--------------------------------------------------------------------------------------------------
-bool libEFA54406_gt_ClearQueue2_Func (bool testConds, bool runActions) {
-    // Automatic Variable Declarations
-    // Actions
-    if (!runActions) {
-        return true;
-    }
-
-    while ((libEFA54406_gv_bankwriteallowed == false)) {
-        Wait(0.01, c_timeGame);
-    }
-    libEFA54406_gv_bankwriteallowed = false;
-    BankLoad("NeuroIntegration", 1);
-    BankWait(BankLastCreated());
-    BankValueSetFromFlag(BankLastCreated(), "game_state", "clear_queue", true);
-    BankSave(BankLastCreated());
-    libEFA54406_gv_bankwriteallowed = true;
-    return true;
-}
-
-//--------------------------------------------------------------------------------------------------
-void libEFA54406_gt_ClearQueue2_Init () {
-    libEFA54406_gt_ClearQueue2 = TriggerCreate("libEFA54406_gt_ClearQueue2_Func");
-}
-
-//--------------------------------------------------------------------------------------------------
 // Trigger: Init Load
 //--------------------------------------------------------------------------------------------------
 bool libEFA54406_gt_InitLoad_Func (bool testConds, bool runActions) {
@@ -679,7 +652,6 @@ void libEFA54406_InitTriggers () {
     libEFA54406_gt_CleanNeuroIntegrationbank_Init();
     libEFA54406_gt_BlockCommands_Init();
     libEFA54406_gt_ClearQueue_Init();
-    libEFA54406_gt_ClearQueue2_Init();
     libEFA54406_gt_InitLoad_Init();
     libEFA54406_gt_Savebackupbankinit_Init();
     libEFA54406_gt_Savebackupbank_Init();
