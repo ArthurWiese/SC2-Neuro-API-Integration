@@ -28,6 +28,7 @@ trigger libEFA54406_gt_CleanUp;
 trigger libEFA54406_gt_CleanNeuroIntegrationbank;
 trigger libEFA54406_gt_BlockCommands;
 trigger libEFA54406_gt_ClearQueue;
+trigger libEFA54406_gt_ClearQueue2;
 trigger libEFA54406_gt_InitLoad;
 trigger libEFA54406_gt_Savebackupbankinit;
 trigger libEFA54406_gt_Savebackupbank;

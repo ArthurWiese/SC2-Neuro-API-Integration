@@ -47,6 +47,7 @@ Trigger/Name/lib_EFA54406_30F36873=Clear Queue
 Trigger/Name/lib_EFA54406_3597F259=Disable Achievements/Cheats
 Trigger/Name/lib_EFA54406_849DCF72=Stop execution global
 Trigger/Name/lib_EFA54406_A0833DC2=Init Load
+Trigger/Name/lib_EFA54406_A3B95166=Clear Queue 2
 Trigger/Name/lib_EFA54406_A5AD3878=Clean Up
 Trigger/Name/lib_EFA54406_AFE49114=Player chat message
 Trigger/Name/lib_EFA54406_B82C7FBD=Create NeuroIntegration bank
