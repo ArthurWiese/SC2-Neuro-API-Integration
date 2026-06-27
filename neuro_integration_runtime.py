@@ -57,8 +57,9 @@ class NeuroIntegrationRuntimeMixin:
         self._game_is_blocking: bool = False
         self._game_state_active_value: int = 0
         self._last_game_state_active_value: int = 0
-        self._game_state_active_last_changed_time: float | None = None
+        self._game_state_active_last_changed_time: float = 0.0
         self._game_state_active_timeout_handled_value: int | None = None
+        self._last_parsed_context: dict[str, Any] = {}
         self._active_force_groups: list[dict[tuple[list[str], str, str, bool, str]]] = []
         self._active_actions: dict[str, dict[str, Any]] = {}
         self._action_queue: deque[dict[str, Any]] = deque()
@@ -530,16 +531,15 @@ class NeuroIntegrationRuntimeMixin:
     
         self._bank_update_in_progress = False
         await self._notify_action_queue_state_changed()
+        # await asyncio.sleep(0.05) # This delay does not seem to be necessary
 
     async def _skip_if_unsafe_bank_write_window(self) -> bool:
-        last_changed_time = self._game_state_active_last_changed_time
-        if last_changed_time is not None:
-            elapsed_seconds = asyncio.get_running_loop().time() - last_changed_time
-            if elapsed_seconds < 0.3:
-                return False
-            return True
-        
-        return False
+        elapsed_seconds = asyncio.get_running_loop().time() - self._game_state_active_last_changed_time
+        if elapsed_seconds < 0.3:
+            # Can write to file
+            return False
+        # Out of write window
+        return True
     
     async def _clear_queue(self, game_state: dict[str, Any]) -> None:
         clear_queue = game_state.get("clear_queue", False)
@@ -571,6 +571,12 @@ class NeuroIntegrationRuntimeMixin:
     async def _update_game_context(self, game_context: dict[str, Any]) -> None:
         if not isinstance(game_context, dict) or self._bank_file_path is None:
             return
+        
+        if game_context == self._last_parsed_context:
+            return
+        self.print_line("Last parsed game context: " + str(self._last_parsed_context), 3)
+        self.print_line("Game context updated; parsed game context: " + str(game_context), 3)
+        self._last_parsed_context = game_context
 
         contexts: list[str] = []
         silent = True
@@ -1191,7 +1197,7 @@ class NeuroIntegrationRuntimeMixin:
                     now = loop.time()
                     last_change = self._game_state_active_last_changed_time
                     
-                    if last_change is None or (now - last_change) > 0.3:
+                    if (now - last_change) > 0.3:
                         await self._action_queue_condition.wait()
                         continue
 
@@ -1335,7 +1341,7 @@ class NeuroIntegrationRuntimeMixin:
 
     def _clear_game_state_active_watchdog_state(self) -> None:
         self._game_state_active_value = None
-        self._game_state_active_last_changed_time = None
+        self._game_state_active_last_changed_time = 0.0
         self._game_state_active_timeout_handled_value = None
 
     async def _monitor_game_state_active_timeout(self) -> None:
@@ -1345,7 +1351,7 @@ class NeuroIntegrationRuntimeMixin:
                     self._in_mission is True
                     and self._bank_file_path is not None
                     and self._game_state_active_value is not None
-                    and self._game_state_active_last_changed_time is not None
+                    and self._game_state_active_last_changed_time != 0.0
                     and self._game_state_active_timeout_handled_value != self._game_state_active_value
                 ):
                     elapsed_seconds = asyncio.get_running_loop().time() - self._game_state_active_last_changed_time
@@ -1455,8 +1461,9 @@ class NeuroIntegrationRuntimeMixin:
         self._game_is_blocking = False
         self._game_state_active_value = None
         self._last_game_state_active_value = 0
-        self._game_state_active_last_changed_time = None
+        self._game_state_active_last_changed_time = 0.0
         self._game_state_active_timeout_handled_value = None
+        self._last_parsed_context = {}
         self._active_force_groups = []
         self._active_actions = {}
         self._action_queue = deque()
