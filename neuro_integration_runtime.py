@@ -53,6 +53,7 @@ class NeuroIntegrationRuntimeMixin:
         self._last_backup_bank_id: int | None = None
         self._last_parsed_bank_data: dict[str, dict[str, Any]] = {}
         self._in_mission: bool | None = None
+        self._in_mission_init: bool = False
         self._game_is_paused: bool = False
         self._game_is_blocking: bool = False
         self._game_state_active_value: int = 0
@@ -67,6 +68,9 @@ class NeuroIntegrationRuntimeMixin:
         self._action_queue_blocked_until: float = 0.0
         self._bank_write_lock: asyncio.Lock | None = None
         self._bank_update_in_progress: bool = False
+        self._session_id: str | None = None
+        self._character_id: str = "neuro"
+        self._display_name: str = "Neuro-sama"
 
 
     def _set_neuro_url(self, url_str: str) -> list[str]:
@@ -491,6 +495,7 @@ class NeuroIntegrationRuntimeMixin:
             return
         elif not self._in_mission and new_in_mission or self._in_mission is None and new_in_mission:
             self._in_mission = True
+            self._in_mission_init = True
             await self._send_neuro_context("Entered mission; game can now process commands.")
 
         new_is_blocking = game_state.get("is_blocking", False)
@@ -521,6 +526,10 @@ class NeuroIntegrationRuntimeMixin:
         self._bank_update_in_progress = True
         await self._notify_action_queue_state_changed()
 
+        if self._in_mission_init:
+            await self._init_mission_display_name()
+            self._in_mission_init = False
+
         await self._clear_queue(game_state)
 
         await self._update_game_context(game_context)
@@ -540,6 +549,11 @@ class NeuroIntegrationRuntimeMixin:
             return False
         # Out of write window
         return True
+    
+    async def _init_mission_display_name(self) -> None:
+        update = {"game_state": {"display_name": self._display_name}}
+        self.print_line(f"Setting display name in bank file to '{self._display_name}'", 2)
+        await self._run_serialised_bank_write(lambda: write_bank_values(self._bank_file_path, update))
     
     async def _clear_queue(self, game_state: dict[str, Any]) -> None:
         clear_queue = game_state.get("clear_queue", False)
@@ -599,7 +613,7 @@ class NeuroIntegrationRuntimeMixin:
                 message = "\n".join(contexts)
                 await self._send_neuro_context(message, silent=silent)
             except Exception as exc:
-                self.print_line(f"Failed to send game context to Neuro: {exc}", 0)
+                self.print_line(f"Failed to send game context to {self._display_name}: {exc}", 0)
 
     async def _sync_possible_actions(self, possible_actions_section: dict[str, Any]) -> None:
         extracted_actions = await self._extract_actions(possible_actions_section)
@@ -776,7 +790,7 @@ class NeuroIntegrationRuntimeMixin:
 
         startup_payload = self._neuro_builder.startup()
         await self._neuro_ws.send_str(json.dumps(startup_payload))
-        self.print_line("Integration -> Neuro: Startup command.", 2)
+        self.print_line(f"Integration -> {self._display_name}: Startup command.", 2)
 
     async def _send_neuro_context(self, message: str, silent: bool = True) -> None:
         if message is None:
@@ -785,7 +799,7 @@ class NeuroIntegrationRuntimeMixin:
             raise RuntimeError("Neuro websocket is not connected")
         payload = self._neuro_builder.context(message=message, silent=silent)
         await self._neuro_ws.send_str(json.dumps(payload))
-        self.print_line("Integration -> Neuro: Context command.", 2)
+        self.print_line(f"Integration -> {self._display_name}: Context command.", 2)
         self.print_line(f"Context message: {message}", 2)
             
     async def _send_neuro_register_actions(self, actions: list[dict[str, Any]]) -> None:
@@ -799,7 +813,7 @@ class NeuroIntegrationRuntimeMixin:
 
         payload = self._neuro_builder.actions_register(actions=sanitized_actions)
         await self._neuro_ws.send_str(json.dumps(payload))
-        self.print_line("Integration -> Neuro: Register actions command.", 2)
+        self.print_line(f"Integration -> {self._display_name}: Register actions command.", 2)
         self.print_line(f"Registered actions: {json.dumps(sanitized_actions)}", 2)
 
     async def _send_neuro_unregister_actions(self, action_names: list[str]) -> None:
@@ -807,7 +821,7 @@ class NeuroIntegrationRuntimeMixin:
             raise RuntimeError("Neuro websocket is not connected")
         payload = self._neuro_builder.actions_unregister(action_names=action_names)
         await self._neuro_ws.send_str(json.dumps(payload))
-        self.print_line("Integration -> Neuro: Unregister actions command.", 2)
+        self.print_line(f"Integration -> {self._display_name}: Unregister actions command.", 2)
         self.print_line(f"Unregistered actions: {json.dumps(action_names)}", 2)
 
     async def _unregister_actions(self, action_names: list[str]) -> None:
@@ -817,7 +831,7 @@ class NeuroIntegrationRuntimeMixin:
             summary = ""
             for removed in queue_actions_removed:
                 summary += self._format_action_command_for_context(removed)
-            self.print_line(f"Removing queued actions due to them being unregistered: {summary}", 2)
+            self.print_line(f"Integration -> {self._display_name}: Removing queued actions due to them being unregistered: {summary}", 2)
             await self._send_neuro_context(f"Removing queued actions due to them being unregistered: {summary}")
             self._action_queue = deque(action for action in self._action_queue if action.get("name") not in action_names)
         for name in action_names:
@@ -850,7 +864,7 @@ class NeuroIntegrationRuntimeMixin:
             priority=priority,
         )
         await self._neuro_ws.send_str(json.dumps(payload))
-        self.print_line("Integration -> Neuro: Force actions command.", 2)
+        self.print_line(f"Integration -> {self._display_name}: Force actions command.", 2)
         self.print_line(
             f"Force actions: query={query!r}, state={state!r}, ephemeral_context={ephemeral_context}, priority={priority!r}, actions={json.dumps(action_names)}",
             2,
@@ -926,11 +940,11 @@ class NeuroIntegrationRuntimeMixin:
         # For now Neuro can only process one action force at a time, so only send one and ignore the rest
         if self._active_force_groups and self._active_force_groups != force_groups:
             active_force_actions = [action_group[0] for action_group in self._active_force_groups[0].values()][0]
-            self.print_line(f"Multiple force actions active at the same time. Neuro needs to use one of: {active_force_actions}; Ignoring the rest for now: {[action_group for action_group in force_groups if action_group.keys() != self._active_force_groups[0].keys()]}", 0)
+            self.print_line(f"Multiple force actions active at the same time. {self._display_name} needs to use one of: {active_force_actions}; Ignoring the rest for now: {[action_group for action_group in force_groups if action_group.keys() != self._active_force_groups[0].keys()]}", 0)
             return
         
         if not self._active_force_groups and len(force_groups) > 1:
-            self.print_line(f"Multiple force actions active at the same time. Sending {force_groups[0]} to Neuro and ignoring the rest for now: {force_groups[1:]}", 0)
+            self.print_line(f"Multiple force actions active at the same time. Sending {force_groups[0]} to {self._display_name} and ignoring the rest for now: {force_groups[1:]}", 0)
             force_groups = [force_groups[0]]
 
         for action_names, query_value, state_value, ephemeral_value, priority in force_groups[0].values():
@@ -967,48 +981,66 @@ class NeuroIntegrationRuntimeMixin:
             self.print_line(f"Neuro listener error: {exc}", 0)
 
     async def _handle_neuro_text_message(self, payload_text: str) -> None:
-        self.print_line("Neuro -> Integration: Received message.", 2)
+        self.print_line(f"{self._display_name} -> Integration: Received message.", 2)
         self.print_line(f"Message: {payload_text}", 2)
 
         try:
             payload = json.loads(payload_text)
         except json.JSONDecodeError:
-            self.print_line(f"Received invalid JSON from Neuro: {payload_text}", 0)
+            self.print_line(f"Received invalid JSON from {self._display_name}: {payload_text}", 0)
             return
 
         if not isinstance(payload, dict):
-            self.print_line(f"Received malformed message from Neuro: {payload_text}", 0)
-            return
-
-        command = payload.get("command")
-        if command not in ["action", "actions/reregister_all"]:
-            self.print_line(f"Received unknown command from Neuro: {command}", 0)
-            return
-        
-        if command == "actions/reregister_all":
-            await self._handle_neuro_reregister_all_command()
+            self.print_line(f"Received malformed message from {self._display_name}: {payload_text}", 0)
             return
 
         data = payload.get("data")
-        if not isinstance(data, dict):
-            self.print_line(f"Received malformed command data from Neuro: {payload_text}", 0)
+        command = payload.get("command")
+
+        if not isinstance(data, dict) and command != "actions/reregister_all":
+            self.print_line(f"Received malformed command data from {self._display_name}: {payload_text}", 0)
             return
 
-        await self._handle_neuro_action_command(data)
+        match command:
+            case "action":
+                await self._handle_neuro_action_command(data)
+            
+            case "actions/reregister_all":
+                await self._handle_neuro_reregister_all_command()
+
+            case "startup":
+                await self._handle_neuro_startup_command(data)
+            
+            case _:
+                self.print_line(f"Received unknown command from {self._display_name}: {command}", 0)
     
+    async def _handle_neuro_startup_command(self, data: dict[str, Any]) -> None:
+        session_data: dict[str, Any] = data.get("session")
+        self._session_id = str(session_data.get("sessionId") or "").strip()
+        self._character_id = str(session_data.get("characterId") or "").strip()
+        display_name = str(session_data.get("displayName") or "").strip()
+        if not self._session_id or not self._character_id or not display_name:
+            self.print_line(f"Received malformed startup command from {self._display_name}: {data}", 0)
+            return
+        
+        self._display_name = display_name
+
+        self.print_line(f"Startup acknowledgement. Session ID: {self._session_id}, Character ID: {self._character_id}, Display Name: {self._display_name}", 2)
+        self.print_line(f"Connection identified itself as '{self._display_name}'", 1)
+
     async def _handle_neuro_reregister_all_command(self) -> None:
         if not self._active_actions:
-            self.print_line("Received reregister all command from Neuro but there are no active actions to register.", 2)
+            self.print_line(f"Received reregister all command from {self._display_name} but there are no active actions to register.", 2)
             return
 
         await self._send_neuro_register_actions(list(self._active_actions.values()))
-        self.print_line(f"Re-registered all {len(self._active_actions)} active action(s) with Neuro.", 2)
+        self.print_line(f"Re-registered all {len(self._active_actions)} active action(s) with {self._display_name}.", 2)
 
     async def _handle_neuro_action_command(self, data: dict[str, Any]) -> None:
         action_id = str(data.get("id") or "").strip()
         action_name = str(data.get("name") or "").strip()
         if not action_id or not action_name:
-            self.print_line(f"Received malformed action command from Neuro: {data}", 0)
+            self.print_line(f"Received malformed action command from {self._display_name}: {data}", 0)
             return
 
         if action_name not in self._active_actions:
@@ -1328,10 +1360,11 @@ class NeuroIntegrationRuntimeMixin:
         # active_value is default 0 and at start of mission 0. The integration only recognises the game as paused/unpaused if the execution loop has started.
         # (Cutscene at the start of mission doesn't give context "Game is paused/unpaused")
         if self._game_state_active_value != active_value and active_value != 0:
-            if self._game_state_active_value is None:
+            if self._game_state_active_value == 0:  # At least one active value change has occured before integration can write to bank file (Fixes integration starting while mission is running)
                 self._last_game_state_active_value = int(0)
-            else:
-                self._last_game_state_active_value = self._game_state_active_value
+                self._game_state_active_value = active_value
+                return False
+            self._last_game_state_active_value = self._game_state_active_value
             self._game_state_active_value = active_value
             self._game_state_active_last_changed_time = current_time
             self._game_state_active_timeout_handled_value = None
@@ -1340,7 +1373,7 @@ class NeuroIntegrationRuntimeMixin:
         return False
 
     def _clear_game_state_active_watchdog_state(self) -> None:
-        self._game_state_active_value = None
+        self._game_state_active_value = 0
         self._game_state_active_last_changed_time = 0.0
         self._game_state_active_timeout_handled_value = None
 
@@ -1350,7 +1383,7 @@ class NeuroIntegrationRuntimeMixin:
                 if (
                     self._in_mission is True
                     and self._bank_file_path is not None
-                    and self._game_state_active_value is not None
+                    and self._game_state_active_value != 0
                     and self._game_state_active_last_changed_time != 0.0
                     and self._game_state_active_timeout_handled_value != self._game_state_active_value
                 ):
@@ -1457,9 +1490,10 @@ class NeuroIntegrationRuntimeMixin:
         self._last_backup_bank_id = None
         self._last_parsed_bank_data = {}
         self._in_mission = None
+        self._in_mission_init = False
         self._game_is_paused = False
         self._game_is_blocking = False
-        self._game_state_active_value = None
+        self._game_state_active_value = 0
         self._last_game_state_active_value = 0
         self._game_state_active_last_changed_time = 0.0
         self._game_state_active_timeout_handled_value = None
@@ -1471,3 +1505,6 @@ class NeuroIntegrationRuntimeMixin:
         self._action_queue_blocked_until = 0.0
         self._bank_write_lock = None
         self._bank_update_in_progress = False
+        self._session_id = None
+        self._character_id = "neuro"
+        self._display_name = "Neuro-sama"

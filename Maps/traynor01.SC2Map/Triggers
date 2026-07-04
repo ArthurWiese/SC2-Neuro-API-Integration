@@ -23,8 +23,6 @@
         <Action Type="FunctionCall" Id="EE4E52CE"/>
         <Action Type="Comment" Id="11154FB6"/>
         <Action Type="FunctionCall" Id="5D445857"/>
-        <Action Type="Comment" Id="6520B21E"/>
-        <Action Type="FunctionCall" Id="2EF5E907"/>
         <Action Type="Comment" Id="80E4F16C"/>
         <Action Type="FunctionCall" Id="B003BE66"/>
         <Action Type="FunctionCall" Id="4C6EC0E8"/>
@@ -317,50 +315,9 @@
         <ParameterDef Type="ParamDef" Library="Ntve" Id="25A88BC6"/>
         <Preset Type="PresetValue" Library="Ntve" Id="00000121"/>
     </Element>
-    <Element Type="Comment" Id="6520B21E">
-        <Comment>
-            Store updated bank backup id
-        </Comment>
-    </Element>
-    <Element Type="FunctionCall" Id="2EF5E907">
-        <FunctionDef Type="FunctionDef" Library="Ntve" Id="00000136"/>
-        <Parameter Type="Param" Id="A8CECB6B"/>
-        <Parameter Type="Param" Id="A6245F38"/>
-    </Element>
-    <Element Type="Param" Id="A8CECB6B">
-        <ParameterDef Type="ParamDef" Library="Ntve" Id="00000219"/>
-        <Variable Type="Variable" Library="EFA54406" Id="184C9194"/>
-    </Element>
-    <Element Type="Param" Id="A6245F38">
-        <ParameterDef Type="ParamDef" Library="Ntve" Id="00000220"/>
-        <FunctionCall Type="FunctionCall" Id="8004CE1D"/>
-    </Element>
-    <Element Type="FunctionCall" Id="8004CE1D">
-        <FunctionDef Type="FunctionDef" Library="Ntve" Id="00000305"/>
-        <Parameter Type="Param" Id="8E303292"/>
-        <Parameter Type="Param" Id="97D0212A"/>
-        <Parameter Type="Param" Id="B3C7B80F"/>
-    </Element>
-    <Element Type="Param" Id="8E303292">
-        <ParameterDef Type="ParamDef" Library="Ntve" Id="00000532"/>
-        <FunctionCall Type="FunctionCall" Id="D28B2311"/>
-    </Element>
-    <Element Type="FunctionCall" Id="D28B2311">
-        <FunctionDef Type="FunctionDef" Library="Ntve" Id="00000279"/>
-    </Element>
-    <Element Type="Param" Id="97D0212A">
-        <ParameterDef Type="ParamDef" Library="Ntve" Id="00000534"/>
-        <Value>backup_bank_id</Value>
-        <ValueType Type="string"/>
-    </Element>
-    <Element Type="Param" Id="B3C7B80F">
-        <ParameterDef Type="ParamDef" Library="Ntve" Id="00000533"/>
-        <Value>game_state</Value>
-        <ValueType Type="string"/>
-    </Element>
     <Element Type="Comment" Id="80E4F16C">
         <Comment>
-            Game is paused check
+            Game is active check
         </Comment>
     </Element>
     <Element Type="FunctionCall" Id="B003BE66">

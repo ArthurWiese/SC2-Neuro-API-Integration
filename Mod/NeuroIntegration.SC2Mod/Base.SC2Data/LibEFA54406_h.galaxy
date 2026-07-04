@@ -7,6 +7,8 @@ include "TriggerLibs/natives"
 bool libEFA54406_gv_bankwriteallowed;
 bank libEFA54406_gv_neuroIntegration;
 int libEFA54406_gv_currentbankbackupid;
+string libEFA54406_gv_displayNameString;
+text libEFA54406_gv_displayNameText;
 
 // Function Declarations
 void libEFA54406_gf_create_action_0_arg (string lp_action_name, bool lp_action_active, string lp_action_description, int lp_action_uses);

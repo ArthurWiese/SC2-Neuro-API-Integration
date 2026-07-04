@@ -338,7 +338,6 @@ bool gt_Executeactionsmap_Func (bool testConds, bool runActions) {
         DialogSetVisible(gv_raynormaxhealthdecision, PlayerGroupAll(), false);
     }
 
-    libEFA54406_gv_currentbankbackupid = BankValueGetAsInt(BankLastCreated(), "game_state", "backup_bank_id");
     BankValueSetFromInt(BankLastCreated(), "game_state", "active", (BankValueGetAsInt(BankLastCreated(), "game_state", "active") + 1));
     BankSave(BankLastCreated());
     Wait(0.4, c_timeReal);
