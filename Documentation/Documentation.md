@@ -38,6 +38,7 @@ Every action command that was defined needs a section in the execution loop to t
 Step-by-step:
 - Don't allow any events in the game to write to the bank file while the bank file is checked
 - Store the updated bank backup id that the integration wrote to the bank file. This id will be used by the game to load the correct bank backup when it is loaded
+- If the integration was started during a mission or if it reconnects, it will set the startup_context flag to True. This triggers the startup_context event which can be used to give the integration context about the current situation
 - Set the displayed name provided by the connection. "Neuro-sama" will get coloured pink, "Evil Neuro" red and everything else also pink
 - Deal with all actions defined on a global level
 - Call the local part of the execution loop
