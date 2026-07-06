@@ -20,8 +20,7 @@ This .SC2Mod file contains:
 
  - Templates to create action commands, action force commands and context commands
  - Triggers shared by all maps to make the integration work, among others the global part of the execution loop
- - Global variables to coordinate writes from the game and the backup bank id to be used when the game is loaded
-
+ - Global variables to coordinate writes from the game, the backup bank id to be used when the game is loaded and the displayed name of the connection
 <img src="MapFileOverview.jpg">
 Every .SC2Map file that uses the integration must also contain:
 
@@ -38,10 +37,11 @@ Every action command that was defined needs a section in the execution loop to t
 
 Step-by-step:
 - Don't allow any events in the game to write to the bank file while the bank file is checked
+- Store the updated bank backup id that the integration wrote to the bank file. This id will be used by the game to load the correct bank backup when it is loaded
+- Set the displayed name provided by the connection. "Neuro-sama" will get coloured pink, "Evil Neuro" red and everything else also pink
 - Deal with all actions defined on a global level
 - Call the local part of the execution loop
 - Deal with all actions defined on a local level
-- Store the updated bank backup id that the integration wrote to the bank file. This id will be used by the game to load the correct bank backup when it is loaded
 - Update the "active" value and save all changes made to the bank file. This is the signal for the integration that the game is not paused and also opens the write window for the integration to the bank file
 - Save changes made to the bank file by the integration and open a write window for the game to write to the bank file before calling the global part of the execution loop and repeat
 
