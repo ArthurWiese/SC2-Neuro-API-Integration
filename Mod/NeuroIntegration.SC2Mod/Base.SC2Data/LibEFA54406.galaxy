@@ -352,6 +352,11 @@ bool libEFA54406_gt_Executeactionsglobal_Func (bool testConds, bool runActions) 
     BankLoad("NeuroIntegration", 1);
     BankWait(BankLastCreated());
     libEFA54406_gv_currentbankbackupid = BankValueGetAsInt(BankLastCreated(), "game_state", "backup_bank_id");
+    if ((BankValueGetAsFlag(BankLastCreated(), "game_state", "startup_context") == true)) {
+        BankValueSetFromFlag(BankLastCreated(), "game_state", "startup_context", false);
+        TriggerSendEvent("startup_context");
+    }
+
     if ((libEFA54406_gv_displayNameString != BankValueGetAsString(BankLastCreated(), "game_state", "display_name"))) {
         libEFA54406_gv_displayNameString = BankValueGetAsString(BankLastCreated(), "game_state", "display_name");
         auto65C065F5_val = libEFA54406_gv_displayNameString;

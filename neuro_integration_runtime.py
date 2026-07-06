@@ -52,6 +52,7 @@ class NeuroIntegrationRuntimeMixin:
         self._backup_bank_id: int | None = None
         self._last_backup_bank_id: int | None = None
         self._last_parsed_bank_data: dict[str, dict[str, Any]] = {}
+        self._integration_startup: bool = True
         self._in_mission: bool | None = None
         self._in_mission_init: bool = False
         self._game_is_paused: bool = False
@@ -208,6 +209,7 @@ class NeuroIntegrationRuntimeMixin:
                 await self._connect_neuro_websocket()
                 await self._send_neuro_startup()
                 self.print_line("Neuro websocket reconnected successfully.", 1)
+                self._integration_startup = True
                 return True
             except (aiohttp.ClientError, OSError, TimeoutError, RuntimeError, ValueError) as exc:
                 self.print_line(f"Neuro reconnect attempt failed: {exc}", 0)
@@ -513,6 +515,7 @@ class NeuroIntegrationRuntimeMixin:
         await self._notify_action_queue_state_changed()
 
         if not self._in_mission:
+            self._integration_startup = False
             return  # If not in mission, don't bother writing to bank file
         
         skip = await self._skip_if_unsafe_bank_write_window()
@@ -525,6 +528,10 @@ class NeuroIntegrationRuntimeMixin:
 
         self._bank_update_in_progress = True
         await self._notify_action_queue_state_changed()
+
+        if self._integration_startup:
+            await self._startup_context()
+            self._integration_startup = False
 
         if self._in_mission_init:
             await self._init_mission_display_name()
@@ -549,6 +556,11 @@ class NeuroIntegrationRuntimeMixin:
             return False
         # Out of write window
         return True
+    
+    async def _startup_context(self) -> None:
+        update = {"game_state": {"startup_context": True}}
+        self.print_line("Requesting game context because of first time connection or reconnection", 2)
+        await self._run_serialised_bank_write(lambda: write_bank_values(self._bank_file_path, update))
     
     async def _init_mission_display_name(self) -> None:
         update = {"game_state": {"display_name": self._display_name}}
@@ -1489,6 +1501,7 @@ class NeuroIntegrationRuntimeMixin:
         self._backup_bank_id = None
         self._last_backup_bank_id = None
         self._last_parsed_bank_data = {}
+        self._integration_startup = True
         self._in_mission = None
         self._in_mission_init = False
         self._game_is_paused = False
