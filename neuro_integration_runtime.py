@@ -530,6 +530,8 @@ class NeuroIntegrationRuntimeMixin:
         await self._notify_action_queue_state_changed()
 
         if self._integration_startup:
+            game_context = {}
+            await self._run_serialised_bank_write(lambda: clear_game_context_flags(self._bank_file_path))
             await self._startup_context()
             self._integration_startup = False
 
