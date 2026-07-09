@@ -37,6 +37,7 @@
             <Action Type="Comment" Library="EFA54406" Id="33D9597F"/>
             <Action Type="FunctionCall" Library="EFA54406" Id="95940CFC"/>
             <Action Type="FunctionCall" Library="EFA54406" Id="29EB21BE"/>
+            <Action Type="FunctionCall" Library="EFA54406" Id="C2A90753"/>
             <Action Type="FunctionCall" Library="EFA54406" Id="7D1E5651"/>
         </Element>
         <Element Type="FunctionCall" Id="D371C524">
@@ -556,6 +557,20 @@
         </Element>
         <Element Type="FunctionCall" Id="B6B7ED6E">
             <FunctionDef Type="FunctionDef" Library="Ntve" Id="00000279"/>
+        </Element>
+        <Element Type="FunctionCall" Id="C2A90753">
+            <FunctionDef Type="FunctionDef" Library="Ntve" Id="00000242"/>
+            <Parameter Type="Param" Library="EFA54406" Id="6E84DD5B"/>
+            <Parameter Type="Param" Library="EFA54406" Id="759019A4"/>
+        </Element>
+        <Element Type="Param" Id="6E84DD5B">
+            <ParameterDef Type="ParamDef" Library="Ntve" Id="00000419"/>
+            <Value>0.1</Value>
+            <ValueType Type="fixed"/>
+        </Element>
+        <Element Type="Param" Id="759019A4">
+            <ParameterDef Type="ParamDef" Library="Ntve" Id="00000420"/>
+            <Preset Type="PresetValue" Library="Ntve" Id="00000012"/>
         </Element>
         <Element Type="FunctionCall" Id="7D1E5651">
             <FunctionDef Type="FunctionDef" Library="Ntve" Id="9B76E7C9"/>

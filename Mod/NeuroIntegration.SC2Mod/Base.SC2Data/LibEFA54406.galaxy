@@ -378,6 +378,7 @@ bool libEFA54406_gt_Executeactionsglobal_Func (bool testConds, bool runActions) 
     }
 
     BankSave(BankLastCreated());
+    Wait(0.1, c_timeReal);
     TriggerSendEvent("execute_actions_map");
     return true;
 }

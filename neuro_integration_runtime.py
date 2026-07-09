@@ -61,6 +61,7 @@ class NeuroIntegrationRuntimeMixin:
         self._last_game_state_active_value: int = 0
         self._game_state_active_last_changed_time: float = 0.0
         self._game_state_active_timeout_handled_value: int | None = None
+        self._has_written: bool = True
         self._last_parsed_context: dict[str, Any] = {}
         self._active_force_groups: list[dict[tuple[list[str], str, str, bool, str]]] = []
         self._active_actions: dict[str, dict[str, Any]] = {}
@@ -487,6 +488,9 @@ class NeuroIntegrationRuntimeMixin:
                 if self._game_is_paused:
                     self._game_is_paused = False
                     await self._send_neuro_context("Game is now unpaused.")
+                self._has_written = False
+            else:
+                self._has_written = True
         else:
             self._clear_game_state_active_watchdog_state()
             await self._cleanup_communication()
@@ -553,7 +557,7 @@ class NeuroIntegrationRuntimeMixin:
 
     async def _skip_if_unsafe_bank_write_window(self) -> bool:
         elapsed_seconds = asyncio.get_running_loop().time() - self._game_state_active_last_changed_time
-        if elapsed_seconds < 0.3:
+        if elapsed_seconds < 0.3 and not self._has_written:
             # Can write to file
             return False
         # Out of write window
@@ -600,11 +604,13 @@ class NeuroIntegrationRuntimeMixin:
         if not isinstance(game_context, dict) or self._bank_file_path is None:
             return
         
-        if game_context == self._last_parsed_context:
-            return
-        self.print_line("Last parsed game context: " + str(self._last_parsed_context), 3)
-        self.print_line("Game context updated; parsed game context: " + str(game_context), 3)
-        self._last_parsed_context = game_context
+        # Should work without this check. In some situations you want to give the exact same context multiple times
+        #
+        # if game_context == self._last_parsed_context:
+        #     return
+        # self.print_line("Last parsed game context: " + str(self._last_parsed_context), 3)
+        # self.print_line("Game context updated; parsed game context: " + str(game_context), 3)
+        # self._last_parsed_context = game_context
 
         contexts: list[str] = []
         silent = True
