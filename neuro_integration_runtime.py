@@ -210,7 +210,8 @@ class NeuroIntegrationRuntimeMixin:
                 await self._connect_neuro_websocket()
                 await self._send_neuro_startup()
                 self.print_line("Neuro websocket reconnected successfully.", 1)
-                self._integration_startup = True
+                await self._handle_neuro_reregister_all_command()
+                self._integration_startup = True    # Receive startup context again after reconnection
                 return True
             except (aiohttp.ClientError, OSError, TimeoutError, RuntimeError, ValueError) as exc:
                 self.print_line(f"Neuro reconnect attempt failed: {exc}", 0)
@@ -1072,11 +1073,11 @@ class NeuroIntegrationRuntimeMixin:
         action_definition = self._active_actions[action_name]
         action_args = self._parse_action_arguments(data.get("data"), action_definition.get("schema"))
         if isinstance(action_args, Exception):
-            await self._send_neuro_action_result(action_id, False, f"Invalid action arguments: {action_args}. Sending all available actions.")
+            await self._send_neuro_action_result(action_id, False, f"Invalid action arguments: {action_args}. Schema for action '{action_name}' is: {action_definition.get('schema')}.")
             await self._handle_neuro_reregister_all_command()
             return
 
-        await self._send_neuro_action_result(action_id, True, f"Action '{action_name}' is being executed.")
+        await self._send_neuro_action_result(action_id, True)
 
         await self._enqueue_action_command({"id": action_id, "name": action_name, "args": action_args})
        
@@ -1383,6 +1384,7 @@ class NeuroIntegrationRuntimeMixin:
             if self._game_state_active_value == 0:  # At least one active value change has occured before integration can write to bank file (Fixes integration starting while mission is running)
                 self._last_game_state_active_value = int(0)
                 self._game_state_active_value = active_value
+                self._integration_startup = False   # Ensure startup context isn't sent when mission starts (Deal with possible incorrect game state at game launch leading to doubling context messages)
                 return False
             self._last_game_state_active_value = self._game_state_active_value
             self._game_state_active_value = active_value

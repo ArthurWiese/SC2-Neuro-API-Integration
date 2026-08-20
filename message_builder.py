@@ -74,6 +74,8 @@ class NeuroAPIMessageBuilder:
         }
         if state is not None:
             data["state"] = state
+        else:
+            data["state"] = ""
 
         return {
             "command": "actions/force",
@@ -88,6 +90,8 @@ class NeuroAPIMessageBuilder:
         }
         if message is not None:
             data["message"] = message
+        else:
+            data["message"] = ""
 
         return {
             "command": "action/result",
