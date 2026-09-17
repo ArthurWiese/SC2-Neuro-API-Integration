@@ -4,9 +4,11 @@ import asyncio
 from collections import deque
 import json
 import re
+import sqlite3
 import time
 from pathlib import Path
 from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
 from typing import Any, Callable, TYPE_CHECKING
 from urllib.parse import urlparse
 
@@ -40,6 +42,7 @@ class NeuroIntegrationRuntimeMixin:
         self._neuro_session: aiohttp.ClientSession | None = None
         self._neuro_ws: aiohttp.ClientWebSocketResponse | None = None
         self._neuro_listener_task: asyncio.Task | None = None
+        self._voice_transcript_monitor_task: asyncio.Task | None = None
         self._bank_monitor_task: asyncio.Task | None = None
         self._backup_bank_monitor_task: asyncio.Task | None = None
         self._sc2_watchdog_task: asyncio.Task | None = None
@@ -74,18 +77,6 @@ class NeuroIntegrationRuntimeMixin:
         self._character_id: str = "neuro"
         self._display_name: str = "Neuro-sama"
 
-
-    def _set_neuro_url(self, url_str: str) -> list[str]:
-        url = url_str.strip()
-        parsed = urlparse(url)
-
-        if parsed.scheme not in {"ws", "wss"} or not parsed.netloc:
-            return ["Error: neuro_url must be a valid websocket URL"]
-
-        self.neuro_url = url
-        self._save_configuration("neuro_url", self.neuro_url)
-
-        return [f"Neuro URL set to: {self.neuro_url}"]
 
     async def _start_integration(self) -> list[str]:
         if self.integration_running:
@@ -132,6 +123,10 @@ class NeuroIntegrationRuntimeMixin:
         try:
             await self._connect_neuro_websocket()
             await self._send_neuro_startup()
+
+            if self.transcript_db_path is not None:
+                self.print_line("Handy transcript database is set. Sending voice transcripts as context to Neuro.", 1)
+                self._voice_transcript_monitor_task = asyncio.create_task(self._monitor_voice_transcripts(), name="voice-transcript-monitor")
 
             self._bank_file_path = await self._wait_for_integration_bank_file()
 
@@ -263,6 +258,103 @@ class NeuroIntegrationRuntimeMixin:
                 self.print_line(f"Waiting for bank file at {bank_file}", 1)
                 last_reminder_time = current_time
             await asyncio.sleep(0.5)
+
+    async def _monitor_voice_transcripts(self) -> None:
+        if self.transcript_db_path is None:
+            return
+        
+        database_path = Path(self.transcript_db_path)
+        voice_transcript = ""
+        last_transcript_id: int | None = None
+
+        def read_latest_transcript() -> tuple[int, str] | None:
+            if not database_path.exists() or not database_path.is_file():
+                return None
+
+            connection = sqlite3.connect(database_path, timeout=1.0)
+            try:
+                row = connection.execute(
+                    "SELECT id, transcription_text "
+                    "FROM transcription_history ORDER BY id DESC LIMIT 1"
+                ).fetchone()
+            finally:
+                connection.close()
+
+            if row is None:
+                return None
+            return int(row[0]), "" if row[1] is None else str(row[1])
+
+        try:
+            latest_transcript = read_latest_transcript()
+            if latest_transcript is not None:
+                last_transcript_id, voice_transcript = latest_transcript
+        except (OSError, sqlite3.Error, ValueError) as exc:
+            self.print_line(f"Could not read voice transcript database: {exc}", 0)
+
+        loop = asyncio.get_running_loop()
+        database_changed = asyncio.Event()
+
+        class TranscriptDatabaseEventHandler(FileSystemEventHandler):
+            def _notify_if_database(self, event: Any) -> None:
+                if getattr(event, "is_directory", False):
+                    return
+
+                paths = [
+                    getattr(event, "src_path", ""),
+                    getattr(event, "dest_path", ""),
+                ]
+                if not any(path and Path(path) == database_path for path in paths):
+                    return
+
+                try:
+                    loop.call_soon_threadsafe(database_changed.set)
+                except RuntimeError:
+                    pass
+
+            def on_created(self, event: Any) -> None:
+                self._notify_if_database(event)
+
+            def on_modified(self, event: Any) -> None:
+                self._notify_if_database(event)
+
+            def on_moved(self, event: Any) -> None:
+                self._notify_if_database(event)
+
+        observer = Observer()
+        observer.schedule(TranscriptDatabaseEventHandler(), str(database_path.parent), recursive=False)
+        observer.start()
+        self.print_line("Voice transcript database watcher started.", 2)
+
+        try:
+            while self._integration_stop_event is not None and not self._integration_stop_event.is_set():
+                try:
+                    await asyncio.wait_for(database_changed.wait(), timeout=0.5)
+                except asyncio.TimeoutError:
+                    pass
+                database_changed.clear()
+
+                try:
+                    latest_transcript = read_latest_transcript()
+                except (OSError, sqlite3.Error, ValueError) as exc:
+                    self.print_line(f"Could not read voice transcript database: {exc}", 0)
+                    continue
+
+                if latest_transcript is None:
+                    continue
+
+                transcript_id, voice_transcript = latest_transcript
+                if last_transcript_id is not None and transcript_id <= last_transcript_id:
+                    continue
+
+                last_transcript_id = transcript_id
+                if voice_transcript:
+                    await self._send_neuro_context(f"Player says: '{voice_transcript}'", silent=False)
+        except asyncio.CancelledError:
+            raise
+        finally:
+            observer.stop()
+            observer.join(timeout=2.0)
+    
 
     async def _monitor_backup_bank(self) -> None:
         expected_backup_number = 0
@@ -1439,9 +1531,8 @@ class NeuroIntegrationRuntimeMixin:
     
     async def _cleanup_communication(self) -> None:
         await self._unregister_all_active_actions()
+        # Unregistering all active actions will disable force actions
         if self._active_force_groups:
-            # HERE WOULD BE A DEREGISTER FOR FORCE ACTIONS IF NEURO SUPPORTED IT
-            # Relying on that unregistering all active actions will disable force actions
             self._active_force_groups = []
         self._action_queue.clear()
         await self._notify_action_queue_state_changed()
@@ -1465,6 +1556,14 @@ class NeuroIntegrationRuntimeMixin:
             except asyncio.CancelledError:
                 pass
             self._bank_monitor_task = None
+
+        if self._voice_transcript_monitor_task is not None:
+            self._voice_transcript_monitor_task.cancel()
+            try:
+                await self._voice_transcript_monitor_task
+            except asyncio.CancelledError:
+                pass
+            self._voice_transcript_monitor_task = None
 
         if self._backup_bank_monitor_task is not None:
             self._backup_bank_monitor_task.cancel()

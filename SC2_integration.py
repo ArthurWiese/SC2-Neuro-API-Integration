@@ -46,6 +46,7 @@ class TerminalApp(NeuroIntegrationRuntimeMixin):
         self.config_file = Path("configure.json")
         self.game_path: str | None = None
         self.banks_path: str | None = None
+        self.transcript_db_path: str | None = None
         self.neuro_url: str | None = None
         self._ui_queue: queue.Queue[tuple[str, int, bool]] = queue.Queue()
         self._closing: bool = False
@@ -361,6 +362,7 @@ class TerminalApp(NeuroIntegrationRuntimeMixin):
                     ("clear", "", "Clear history"),
                     ("game_path", "<path>", "Set StarCraft II installation path (folder or StarCraft II.exe file)"),
                     ("banks_path", "<path>", "Set banks path (...\\Documents\\StarCraft II\\Accounts\\...\\...\\Banks)"),
+                    ("transcript_db_path", "<path>", "Set the path to the speech transcript database (voice context)"),
                     ("neuro_url", "<URL>", "Set the websocket server url used to connect to Neuro"),
                     ("start_integration", "", "Start Neuro integration"),
                     ("stop_integration", "", "Stop Neuro integration"),
@@ -419,15 +421,24 @@ class TerminalApp(NeuroIntegrationRuntimeMixin):
             
             case "game_path":
                 if not argument_text:
-                    self.print_line(f"Current game path is {self.game_path}", 1)
+                    if self.game_path is not None:
+                        self.print_line(f"Current game path is {self.game_path}", 1)
                     return ["Error: game_path requires a path argument. Usage: game_path <path to StarCraft 2 folder or StarCraft II.exe>"]
                 return self._set_game_path(argument_text)
             
             case "banks_path":
                 if not argument_text:
-                    self.print_line(f"Current banks path is {self.banks_path}", 1)
+                    if self.banks_path is not None:
+                        self.print_line(f"Current banks path is {self.banks_path}", 1)
                     return ["Error: banks_path requires a path argument. Usage: banks_path <path to Banks folder in Documents\\StarCraft II\\Accounts>"]
                 return self._set_banks_path(argument_text)
+
+            case "transcript_db_path":
+                if not argument_text:
+                    if self.transcript_db_path is not None:
+                        self.print_line(f"Current Handy transcript database path is {self.transcript_db_path}", 1)
+                    return ["Error: transcript_db_path requires a path argument. Usage: transcript_db_path <path to Handy transcript database>"]
+                return self._set_transcript_db_path(argument_text)
 
             case "neuro_url":
                 if not argument_text:
@@ -565,6 +576,26 @@ class TerminalApp(NeuroIntegrationRuntimeMixin):
         
         return [f"Banks path found at: {self.banks_path}"]
 
+    def _set_transcript_db_path(self, path_str: str) -> list[str]:
+        path = WindowsPath(path_str.strip())
+        
+        self.transcript_db_path = str(path)
+        self._save_configuration("transcript_db_path", self.transcript_db_path)
+        
+        return [f"Handy transcript database path set to: {self.transcript_db_path}"]
+
+    def _set_neuro_url(self, url_str: str) -> list[str]:
+        url = url_str.strip()
+        parsed = urlparse(url)
+
+        if parsed.scheme not in {"ws", "wss"} or not parsed.netloc:
+            return ["Error: neuro_url must be a valid websocket URL"]
+
+        self.neuro_url = url
+        self._save_configuration("neuro_url", self.neuro_url)
+
+        return [f"Neuro URL set to: {self.neuro_url}"]
+
     def _load_configuration(self) -> None:
         if not self.config_file.exists():
             return
@@ -597,6 +628,15 @@ class TerminalApp(NeuroIntegrationRuntimeMixin):
                         self.print_line(f"Banks path found at: {self.banks_path}", 1)
                     else:
                         self.print_line("Error: Banks path is invalid", 0)
+
+                transcript_db_path = config.get("transcript_db_path")
+                if transcript_db_path:
+                    if not self.is_windows:
+                        path = Path(transcript_db_path)
+                    else:
+                        path = WindowsPath(transcript_db_path)
+                    self.transcript_db_path = path
+                    self.print_line(f"Handy transcript database path set to: {self.transcript_db_path}", 1)
 
                 neuro_url = config.get("neuro_url")
                 if neuro_url:
