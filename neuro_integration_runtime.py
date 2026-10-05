@@ -1476,7 +1476,8 @@ class NeuroIntegrationRuntimeMixin:
             if self._game_state_active_value == 0:  # At least one active value change has occured before integration can write to bank file (Fixes integration starting while mission is running)
                 self._last_game_state_active_value = int(0)
                 self._game_state_active_value = active_value
-                self._integration_startup = False   # Ensure startup context isn't sent when mission starts (Deal with possible incorrect game state at game launch leading to doubling context messages)
+                if active_value <= 2:
+                    self._integration_startup = False   # Ensure startup context isn't sent when mission starts (Deal with possible incorrect game state at game launch leading to doubling context messages)
                 return False
             self._last_game_state_active_value = self._game_state_active_value
             self._game_state_active_value = active_value

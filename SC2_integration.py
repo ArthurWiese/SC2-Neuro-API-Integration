@@ -362,7 +362,7 @@ class TerminalApp(NeuroIntegrationRuntimeMixin):
                     ("clear", "", "Clear history"),
                     ("game_path", "<path>", "Set StarCraft II installation path (folder or StarCraft II.exe file)"),
                     ("banks_path", "<path>", "Set banks path (...\\Documents\\StarCraft II\\Accounts\\...\\...\\Banks)"),
-                    ("transcript_db_path", "<path>", "Set the path to the speech transcript database (voice context)"),
+                    ("transcript_db_path", "<path>", "Set the path to the Handy speech transcript database (voice context)"),
                     ("neuro_url", "<URL>", "Set the websocket server url used to connect to Neuro"),
                     ("start_integration", "", "Start Neuro integration"),
                     ("stop_integration", "", "Stop Neuro integration"),
