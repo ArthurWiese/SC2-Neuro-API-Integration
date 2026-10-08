@@ -593,6 +593,8 @@ class NeuroIntegrationRuntimeMixin:
             await self._send_neuro_context("The mission has ended; game cannot process commands until the next mission starts.")
             return
         elif not self._in_mission and new_in_mission or self._in_mission is None and new_in_mission:
+            if self._last_game_state_active_value == 0:
+                return  # Only send enter mission context if game is not paused when starting the integration
             self._in_mission = True
             self._in_mission_init = True
             await self._send_neuro_context("Entered mission; game can now process commands.")
@@ -1472,12 +1474,14 @@ class NeuroIntegrationRuntimeMixin:
         current_time = loop.time()
         # active_value is default 0 and at start of mission 0. The integration only recognises the game as paused/unpaused if the execution loop has started.
         # (Cutscene at the start of mission doesn't give context "Game is paused/unpaused")
+        
+        if self._integration_startup is True and active_value <= 1:
+            self._integration_startup = False   # Ensure startup context isn't sent when mission starts
+
         if self._game_state_active_value != active_value and active_value != 0:
             if self._game_state_active_value == 0:  # At least one active value change has occured before integration can write to bank file (Fixes integration starting while mission is running)
                 self._last_game_state_active_value = int(0)
                 self._game_state_active_value = active_value
-                if active_value <= 2:
-                    self._integration_startup = False   # Ensure startup context isn't sent when mission starts (Deal with possible incorrect game state at game launch leading to doubling context messages)
                 return False
             self._last_game_state_active_value = self._game_state_active_value
             self._game_state_active_value = active_value
