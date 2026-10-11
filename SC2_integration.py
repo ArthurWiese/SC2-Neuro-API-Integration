@@ -1,6 +1,7 @@
 """Entry point for the SC2 integration shell."""
 
 import json
+import math
 import os
 import re
 import websockets
@@ -10,6 +11,7 @@ import threading
 import queue
 import tkinter as tk
 from pathlib import Path, WindowsPath
+from typing import Callable
 from urllib.parse import urlparse
 import aiohttp
 from aiohttp.client_ws import ClientWebSocketResponse
@@ -49,7 +51,14 @@ class TerminalApp(NeuroIntegrationRuntimeMixin):
         self.transcript_db_path: str | None = None
         self.neuro_url: str | None = None
         self._ui_queue: queue.Queue[tuple[str, int, bool]] = queue.Queue()
+        self._ui_callback_queue: queue.Queue[Callable[[], None]] = queue.Queue()
         self._closing: bool = False
+        self.ocr_regions: list[tuple[float, float, float, float]] | None = None
+        self._ocr_overlay: tk.Toplevel | None = None
+        self._ocr_canvas: tk.Canvas | None = None
+        self._ocr_edit_regions: list[list[int]] | None = None
+        self._ocr_edit_screen_size: tuple[int, int] | None = None
+        self._ocr_drag_state: tuple[int, str, int, int, tuple[int, int, int, int]] | None = None
         self.connection_handler = sc2api_connection_handler.SC2ConnectionHandler(self)
         self._runtime_init()
 
@@ -270,6 +279,16 @@ class TerminalApp(NeuroIntegrationRuntimeMixin):
 
             self.print_line(text, level, override_verbosity)
 
+        while True:
+            try:
+                callback = self._ui_callback_queue.get_nowait()
+            except queue.Empty:
+                break
+            try:
+                callback()
+            except (tk.TclError, OSError, ValueError, TypeError) as exc:
+                self.print_line(f"Error: OCR region configuration failed: {exc}", 0)
+
         if not self._closing and self._ui_is_available():
             self.root.after(50, self._drain_ui_queue)
 
@@ -364,6 +383,7 @@ class TerminalApp(NeuroIntegrationRuntimeMixin):
                     ("banks_path", "<path>", "Set banks path (...\\Documents\\StarCraft II\\Accounts\\...\\...\\Banks)"),
                     ("transcript_db_path", "<path>", "Set the path to the Handy speech transcript database (voice context)"),
                     ("neuro_url", "<URL>", "Set the websocket server url used to connect to Neuro"),
+                    ("configure_ocr", "", "Place two screen regions for OCR"),
                     ("start_integration", "", "Start Neuro integration"),
                     ("stop_integration", "", "Stop Neuro integration"),
                     ("sc2_launch", "", "Launch StarCraft II and connect to API"),
@@ -449,6 +469,12 @@ class TerminalApp(NeuroIntegrationRuntimeMixin):
                     return ["Error: neuro_url requires a URL argument. Usage: neuro_url <websocket server url>"]
                 return self._set_neuro_url(argument_text)
 
+            case "configure_ocr":
+                if not self.is_windows:
+                    return ["Error: OCR region configuration is currently supported only on Windows."]
+                self._ui_callback_queue.put(self._show_ocr_overlay)
+                return ["Opening OCR region configuration."]
+
             case "start_integration" | "start":
                 return await self._start_integration()
 
@@ -493,6 +519,247 @@ class TerminalApp(NeuroIntegrationRuntimeMixin):
         ]
         protocol_rows = sorted(protocol_rows, key=lambda x: x[0])
         return [f"  {command_name}\t\t{args}\t\t{desc}" for command_name, args, desc in protocol_rows]
+
+    def _show_ocr_overlay(self) -> None:
+        if self._closing:
+            return
+        if self._ocr_overlay is not None:
+            self._ocr_overlay.deiconify()
+            self._ocr_overlay.lift()
+            self._ocr_overlay.focus_force()
+            return
+
+        self.root.update_idletasks()
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        if self._ocr_edit_regions is None or self._ocr_edit_screen_size is None:
+            if self.ocr_regions is None:
+                self._ocr_edit_regions = [
+                    [int(screen_width * 0.12), int(screen_height * 0.2), int(screen_width * 0.35), int(screen_height * 0.14)],
+                    [int(screen_width * 0.53), int(screen_height * 0.2), int(screen_width * 0.35), int(screen_height * 0.14)],
+                ]
+            else:
+                self._ocr_edit_regions = [
+                    [
+                        round(x * screen_width),
+                        round(y * screen_height),
+                        round(width * screen_width),
+                        round(height * screen_height),
+                    ]
+                    for x, y, width, height in self.ocr_regions
+                ]
+            self._ocr_edit_screen_size = (screen_width, screen_height)
+
+        transparent_color = "#010203"
+        overlay = tk.Toplevel(self.root)
+        try:
+            overlay.overrideredirect(True)
+            overlay.geometry(f"{screen_width}x{screen_height}+0+0")
+            overlay.configure(bg=transparent_color)
+            overlay.attributes("-topmost", True)
+            overlay.attributes("-transparentcolor", transparent_color)
+            overlay.bind("<Escape>", self._cancel_ocr_configuration)
+
+            canvas = tk.Canvas(
+                overlay,
+                bg=transparent_color,
+                highlightthickness=0,
+                borderwidth=0,
+            )
+            canvas.pack(fill="both", expand=True)
+            canvas.bind("<ButtonPress-1>", self._begin_ocr_region_drag)
+            canvas.bind("<B1-Motion>", self._drag_ocr_region)
+            canvas.bind("<ButtonRelease-1>", self._end_ocr_region_drag)
+            canvas.bind("<Motion>", self._update_ocr_cursor)
+
+            controls = tk.Frame(overlay, bg="#171b21", padx=12, pady=8)
+            tk.Label(
+                controls,
+                text="Drag each colored label to move its rectangle; drag an edge or corner to resize. Press Esc to cancel.",
+                bg="#171b21",
+                fg="#e7ebf0",
+                font=("Segoe UI", 10),
+            ).pack(side="left", padx=(0, 12))
+            tk.Button(
+                controls,
+                text="Save OCR configuration",
+                command=self._save_ocr_regions,
+            ).pack(side="left")
+            canvas.create_window(12, 12, anchor="nw", window=controls)
+        except tk.TclError as exc:
+            overlay.destroy()
+            self._ocr_edit_regions = None
+            self._ocr_edit_screen_size = None
+            self.print_line(f"Error: Could not create the OCR overlay: {exc}", 0)
+            return
+
+        self._ocr_overlay = overlay
+        self._ocr_canvas = canvas
+        self._draw_ocr_regions()
+        overlay.focus_force()
+
+    def _draw_ocr_regions(self) -> None:
+        if self._ocr_canvas is None or self._ocr_edit_regions is None:
+            return
+
+        canvas = self._ocr_canvas
+        canvas.delete("ocr-region")
+        colors = ("#00ffff", "#ff55ff")
+        for index, (x, y, width, height) in enumerate(self._ocr_edit_regions):
+            color = colors[index]
+            canvas.create_rectangle(
+                x,
+                y,
+                x + width,
+                y + height,
+                outline=color,
+                width=3,
+                tags="ocr-region",
+            )
+            label_right = min(x + width - 4, x + 260)
+            canvas.create_rectangle(
+                x + 4,
+                y + 4,
+                label_right,
+                y + 30,
+                fill=color,
+                outline=color,
+                tags="ocr-region",
+            )
+            canvas.create_text(
+                x + 10,
+                y + 6,
+                anchor="nw",
+                text=f"OCR region {index + 1} - drag to move",
+                fill="#0f1115",
+                font=("Segoe UI", 11, "bold"),
+                tags="ocr-region",
+            )
+            handle_size = 5
+            for handle_x in (x, x + width):
+                for handle_y in (y, y + height):
+                    canvas.create_rectangle(
+                        handle_x - handle_size,
+                        handle_y - handle_size,
+                        handle_x + handle_size,
+                        handle_y + handle_size,
+                        fill=color,
+                        outline=color,
+                        tags="ocr-region",
+                    )
+
+    def _ocr_region_hit(self, x: int, y: int) -> tuple[int, str] | None:
+        if self._ocr_edit_regions is None:
+            return None
+
+        edge_margin = 12
+        for index in reversed(range(len(self._ocr_edit_regions))):
+            left, top, width, height = self._ocr_edit_regions[index]
+            right, bottom = left + width, top + height
+            if not (left <= x <= right and top <= y <= bottom):
+                continue
+
+            if left + 4 <= x <= min(left + width - 4, left + 260) and top + 4 <= y <= top + 30:
+                return index, "move"
+
+            horizontal = "w" if x - left <= edge_margin else "e" if right - x <= edge_margin else ""
+            vertical = "n" if y - top <= edge_margin else "s" if bottom - y <= edge_margin else ""
+            if horizontal or vertical:
+                return index, vertical + horizontal if vertical else horizontal
+            return index, "move"
+        return None
+
+    def _begin_ocr_region_drag(self, event: tk.Event) -> None:
+        hit = self._ocr_region_hit(event.x, event.y)
+        if hit is None or self._ocr_edit_regions is None:
+            self._ocr_drag_state = None
+            return
+
+        index, mode = hit
+        self._ocr_drag_state = (index, mode, event.x, event.y, tuple(self._ocr_edit_regions[index]))
+
+    def _drag_ocr_region(self, event: tk.Event) -> None:
+        if self._ocr_drag_state is None or self._ocr_edit_regions is None or self._ocr_edit_screen_size is None:
+            return
+
+        index, mode, start_x, start_y, original = self._ocr_drag_state
+        x, y, width, height = original
+        screen_width, screen_height = self._ocr_edit_screen_size
+        dx, dy = event.x - start_x, event.y - start_y
+        min_size = 40
+
+        if mode == "move":
+            x = min(max(0, x + dx), max(0, screen_width - width))
+            y = min(max(0, y + dy), max(0, screen_height - height))
+        else:
+            right, bottom = x + width, y + height
+            if "w" in mode:
+                x = min(max(0, x + dx), right - min_size)
+                width = right - x
+            if "e" in mode:
+                width = min(max(min_size, width + dx), screen_width - x)
+            if "n" in mode:
+                y = min(max(0, y + dy), bottom - min_size)
+                height = bottom - y
+            if "s" in mode:
+                height = min(max(min_size, height + dy), screen_height - y)
+
+        self._ocr_edit_regions[index] = [x, y, width, height]
+        self._draw_ocr_regions()
+
+    def _end_ocr_region_drag(self, _event: tk.Event) -> None:
+        self._ocr_drag_state = None
+
+    def _update_ocr_cursor(self, event: tk.Event) -> None:
+        if self._ocr_canvas is None:
+            return
+        hit = self._ocr_region_hit(event.x, event.y)
+        cursor = "arrow" if hit is None else "fleur" if hit[1] == "move" else "sizing"
+        self._ocr_canvas.configure(cursor=cursor)
+
+    def _cancel_ocr_configuration(self, _event: tk.Event | None = None) -> str:
+        self._destroy_ocr_overlay()
+        self.print_line("OCR region configuration cancelled; no changes were saved.", 1)
+        return "break"
+
+    def _save_ocr_regions(self) -> None:
+        if self._ocr_edit_regions is None or self._ocr_edit_screen_size is None:
+            self.print_line("Error: No OCR configuration is active. Use 'configure_ocr' first.", 0)
+            return
+
+        screen_width, screen_height = self._ocr_edit_screen_size
+        regions = [
+            (x / screen_width, y / screen_height, width / screen_width, height / screen_height)
+            for x, y, width, height in self._ocr_edit_regions
+        ]
+        config_data = {
+            "coordinate_space": "normalized",
+            "regions": [
+                {"x": x, "y": y, "width": width, "height": height}
+                for x, y, width, height in regions
+            ],
+        }
+        try:
+            self._save_configuration("ocr_regions", config_data)
+        except (OSError, TypeError, ValueError) as exc:
+            self.print_line(f"Error: Could not save OCR regions: {exc}", 0)
+            return
+
+        self.ocr_regions = regions
+        self._destroy_ocr_overlay()
+        self.print_line("OCR regions saved and overlay closed.", 1)
+
+    def _destroy_ocr_overlay(self) -> None:
+        if self._ocr_overlay is not None:
+            try:
+                self._ocr_overlay.destroy()
+            except tk.TclError:
+                pass
+        self._ocr_overlay = None
+        self._ocr_canvas = None
+        self._ocr_edit_regions = None
+        self._ocr_edit_screen_size = None
+        self._ocr_drag_state = None
     
     def close(self, _event: tk.Event | None = None) -> str | None:
         self._closing = True
@@ -657,10 +924,47 @@ class TerminalApp(NeuroIntegrationRuntimeMixin):
                             self.print_line("Error: verbosity in configuration invalid; expected 0/1/2", 0)
                     except (ValueError, TypeError):
                         self.print_line("Error: verbosity in configuration invalid", 0)
+
+                ocr_regions_cfg = config.get("ocr_regions")
+                if ocr_regions_cfg is not None:
+                    try:
+                        self.ocr_regions = self._parse_ocr_regions(ocr_regions_cfg)
+                        self.print_line("Configured OCR screen regions loaded.", 1)
+                    except ValueError as exc:
+                        self.print_line(f"Error: Configured OCR regions are invalid: {exc}", 0)
         except (json.JSONDecodeError, IOError):
             self.print_line("Error: Could not read configure.json", 0)
 
-    def _save_configuration(self, configuration_name: str, configuration_data: str | None) -> None:
+    @staticmethod
+    def _parse_ocr_regions(configuration_data: object) -> list[tuple[float, float, float, float]]:
+        if not isinstance(configuration_data, dict) or configuration_data.get("coordinate_space") != "normalized":
+            raise ValueError("expected normalized screen coordinates")
+
+        configured_regions = configuration_data.get("regions")
+        if not isinstance(configured_regions, list) or len(configured_regions) != 2:
+            raise ValueError("exactly two regions are required")
+
+        parsed_regions: list[tuple[float, float, float, float]] = []
+        for region in configured_regions:
+            if not isinstance(region, dict):
+                raise ValueError("each region must contain x, y, width, and height")
+            try:
+                x, y, width, height = (
+                    float(region[key])
+                    for key in ("x", "y", "width", "height")
+                )
+            except (KeyError, OverflowError, TypeError, ValueError) as exc:
+                raise ValueError("each region must contain numeric coordinates") from exc
+
+            if not all(math.isfinite(value) for value in (x, y, width, height)):
+                raise ValueError("coordinates must be finite numbers")
+            if x < 0 or y < 0 or width <= 0 or height <= 0 or x + width > 1 or y + height > 1:
+                raise ValueError("regions must fit within the screen")
+            parsed_regions.append((x, y, width, height))
+
+        return parsed_regions
+
+    def _save_configuration(self, configuration_name: str, configuration_data: object | None) -> None:
         config = {}
         if self.config_file.exists():
             try:
@@ -713,4 +1017,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
