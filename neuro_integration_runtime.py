@@ -16,6 +16,8 @@ import aiohttp
 import xml.etree.ElementTree as ET
 import psutil
 
+from ocr_runtime import OCRRuntimeMixin
+
 from bank_file_io import (
     BankFileEventHandler,
     clear_force_action_group,
@@ -28,7 +30,7 @@ if TYPE_CHECKING:
     from SC2_integration import TerminalApp
 
 
-class NeuroIntegrationRuntimeMixin:
+class NeuroIntegrationRuntimeMixin(OCRRuntimeMixin):
     def _runtime_init(self) -> None:
         self._neuro_builder = getattr(self, "_neuro_builder", None)
         if self._neuro_builder is None:
@@ -38,6 +40,7 @@ class NeuroIntegrationRuntimeMixin:
 
         self.integration_running: bool = False
         self._integration_task: asyncio.Task | None = None
+        self._initialize_ocr_runtime()
         self._integration_stop_event: asyncio.Event | None = None
         self._neuro_session: aiohttp.ClientSession | None = None
         self._neuro_ws: aiohttp.ClientWebSocketResponse | None = None
@@ -123,6 +126,29 @@ class NeuroIntegrationRuntimeMixin:
         try:
             await self._connect_neuro_websocket()
             await self._send_neuro_startup()
+
+            if self.is_windows and self.ocr_regions is not None:
+                self._ocr_capture_task = asyncio.create_task(
+                    self._capture_ocr_crops(self.ocr_regions),
+                    name="ocr-screen-capture",
+                )
+                if self.tesseract_path is None:
+                    self.print_line(
+                        f"Capturing configured OCR screen regions every 0.2 seconds to "
+                        f"{Path(__file__).resolve().parent / 'ocr_crops'}.\n"
+                        "OCR text forwarding is disabled; set tesseract_path to enable it.",
+                        1,
+                    )
+                else:
+                    self.print_line(
+                        f"Reading configured OCR screen regions every 0.2 seconds and saving "
+                        f"raw and processed crops to {Path(__file__).resolve().parent / 'ocr_crops'}.",
+                        1,
+                    )
+            elif self.ocr_regions is None:
+                self.print_line("OCR screen regions are not configured; screen crop capture is disabled.", 1)
+            else:
+                self.print_line("OCR screen crop capture is supported only on Windows.", 0)
 
             if self.transcript_db_path is not None:
                 self.print_line("Handy transcript database is set. Sending voice transcripts as context to Neuro.", 1)
@@ -236,6 +262,35 @@ class NeuroIntegrationRuntimeMixin:
                 await self._neuro_session.close()
             finally:
                 self._neuro_session = None
+
+    async def _capture_ocr_crops(self, regions: list[tuple[float, float, float, float]]) -> None:
+        loop = asyncio.get_running_loop()
+        capture_failed = False
+        while True:
+            if not self._in_mission:
+                await asyncio.sleep(0.5)
+                continue
+            capture_started = loop.time()
+            try:
+                await asyncio.to_thread(self._save_ocr_crops, regions)
+                if self.tesseract_path is not None:
+                    recognized_tokens = await asyncio.to_thread(self._read_ocr_crops, self.tesseract_path)
+                    for index, tokens in enumerate(recognized_tokens):
+                        text = self._stable_ocr_prefix(index, tokens)
+                        if text is None:
+                            continue
+                        new_text = self._filter_ocr_text(index, text)
+                        if new_text is not None:
+                            await self._send_neuro_context(new_text, silent=True)
+                if capture_failed:
+                    self.print_line("OCR screen capture recovered.", 1)
+                    capture_failed = False
+            except (OSError, RuntimeError, ValueError) as exc:
+                if not capture_failed:
+                    self.print_line(f"OCR screen capture failed: {exc}", 0)
+                    capture_failed = True
+
+            await asyncio.sleep(max(0.0, 0.2 - (loop.time() - capture_started)))
 
     async def _wait_for_integration_bank_file(self) -> Path:
         if self.banks_path is None:
@@ -1554,6 +1609,16 @@ class NeuroIntegrationRuntimeMixin:
         await self._cleanup_communication()
 
     async def _cleanup_integration_runtime(self) -> None:
+        if self._ocr_capture_task is not None:
+            self._ocr_capture_task.cancel()
+            try:
+                await self._ocr_capture_task
+            except asyncio.CancelledError:
+                pass
+            self._ocr_capture_task = None
+
+        self._reset_ocr_runtime()
+
         if self._bank_monitor_task is not None:
             self._bank_monitor_task.cancel()
             try:

@@ -1,5 +1,7 @@
 aiohttp
 psutil
+Pillow
+pytesseract
 protobuf
 watchdog
 websockets

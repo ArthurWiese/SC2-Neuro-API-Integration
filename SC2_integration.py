@@ -20,6 +20,7 @@ from tkinter import ttk
 import sc2api_connection_handler
 import protocol
 from neuro_integration_runtime import NeuroIntegrationRuntimeMixin
+from ocr_runtime import OCR_REGION_COUNT
 
 
 class TerminalApp(NeuroIntegrationRuntimeMixin):
@@ -50,6 +51,7 @@ class TerminalApp(NeuroIntegrationRuntimeMixin):
         self.banks_path: str | None = None
         self.transcript_db_path: str | None = None
         self.neuro_url: str | None = None
+        self.tesseract_path: str | None = None
         self._ui_queue: queue.Queue[tuple[str, int, bool]] = queue.Queue()
         self._ui_callback_queue: queue.Queue[Callable[[], None]] = queue.Queue()
         self._closing: bool = False
@@ -382,8 +384,9 @@ class TerminalApp(NeuroIntegrationRuntimeMixin):
                     ("game_path", "<path>", "Set StarCraft II installation path (folder or StarCraft II.exe file)"),
                     ("banks_path", "<path>", "Set banks path (...\\Documents\\StarCraft II\\Accounts\\...\\...\\Banks)"),
                     ("transcript_db_path", "<path>", "Set the path to the Handy speech transcript database (voice context)"),
+                    ("tesseract_path", "<path>", "Set the path to the Tesseract OCR executable"),
                     ("neuro_url", "<URL>", "Set the websocket server url used to connect to Neuro"),
-                    ("configure_ocr", "", "Place two screen regions for OCR"),
+                    ("configure_ocr", "", f"Place {OCR_REGION_COUNT} screen regions for OCR"),
                     ("start_integration", "", "Start Neuro integration"),
                     ("stop_integration", "", "Stop Neuro integration"),
                     ("sc2_launch", "", "Launch StarCraft II and connect to API"),
@@ -459,6 +462,15 @@ class TerminalApp(NeuroIntegrationRuntimeMixin):
                         self.print_line(f"Current Handy transcript database path is {self.transcript_db_path}", 1)
                     return ["Error: transcript_db_path requires a path argument. Usage: transcript_db_path <path to Handy transcript database>"]
                 return self._set_transcript_db_path(argument_text)
+
+            case "tesseract_path":
+                if not argument_text:
+                    if self.tesseract_path is not None:
+                        self.print_line(f"Current Tesseract executable path is {self.tesseract_path}", 1)
+                    return ["Error: tesseract_path requires a path argument. Usage: tesseract_path <path to tesseract.exe>"]
+                if not self.is_windows:
+                    return ["Error: tesseract_path is currently supported only on Windows."]
+                return self._set_tesseract_path(argument_text)
 
             case "neuro_url":
                 if not argument_text:
@@ -536,7 +548,8 @@ class TerminalApp(NeuroIntegrationRuntimeMixin):
             if self.ocr_regions is None:
                 self._ocr_edit_regions = [
                     [int(screen_width * 0.12), int(screen_height * 0.2), int(screen_width * 0.35), int(screen_height * 0.14)],
-                    [int(screen_width * 0.53), int(screen_height * 0.2), int(screen_width * 0.35), int(screen_height * 0.14)],
+                    # [int(screen_width * 0.53), int(screen_height * 0.2), int(screen_width * 0.35), int(screen_height * 0.14)],
+                    # [int(screen_width * 0.33), int(screen_height * 0.4), int(screen_width * 0.35), int(screen_height * 0.14)],
                 ]
             else:
                 self._ocr_edit_regions = [
@@ -604,7 +617,7 @@ class TerminalApp(NeuroIntegrationRuntimeMixin):
 
         canvas = self._ocr_canvas
         canvas.delete("ocr-region")
-        colors = ("#00ffff", "#ff55ff")
+        colors = ("#00ffff", "#ff55ff", "#ffff55")
         for index, (x, y, width, height) in enumerate(self._ocr_edit_regions):
             color = colors[index]
             canvas.create_rectangle(
@@ -851,6 +864,31 @@ class TerminalApp(NeuroIntegrationRuntimeMixin):
         
         return [f"Handy transcript database path set to: {self.transcript_db_path}"]
 
+    @staticmethod
+    def _validate_tesseract_path(path_str: str) -> tuple[str | None, str | None]:
+        path_value = path_str.strip().strip('"').strip("'")
+        if not path_value:
+            return None, "Error: Tesseract executable path cannot be empty"
+
+        path = WindowsPath(path_value)
+        if not path.exists():
+            return None, "Error: Tesseract executable not found"
+        if not path.is_file() or path.name.lower() != "tesseract.exe":
+            return None, "Error: Path must point to the Tesseract executable (tesseract.exe)"
+
+        return str(path.resolve()), None
+
+    def _set_tesseract_path(self, path_str: str) -> list[str]:
+        validated_path, error = self._validate_tesseract_path(path_str)
+        if error is not None:
+            return [error]
+        if validated_path is None:
+            return ["Error: Tesseract executable path is invalid"]
+
+        self.tesseract_path = validated_path
+        self._save_configuration("tesseract_path", self.tesseract_path)
+        return [f"Tesseract executable set to: {self.tesseract_path}"]
+
     def _set_neuro_url(self, url_str: str) -> list[str]:
         url = url_str.strip()
         parsed = urlparse(url)
@@ -905,6 +943,20 @@ class TerminalApp(NeuroIntegrationRuntimeMixin):
                     self.transcript_db_path = path
                     self.print_line(f"Handy transcript database path set to: {self.transcript_db_path}", 1)
 
+                tesseract_path_cfg = config.get("tesseract_path")
+                if tesseract_path_cfg:
+                    if not isinstance(tesseract_path_cfg, str):
+                        self.print_line("Error: Configured Tesseract executable path is invalid", 0)
+                    elif not self.is_windows:
+                        self.print_line("Error: Tesseract executable path is supported only on Windows.", 0)
+                    else:
+                        validated_path, error = self._validate_tesseract_path(tesseract_path_cfg)
+                        if error is not None:
+                            self.print_line(error, 0)
+                        elif validated_path is not None:
+                            self.tesseract_path = validated_path
+                            self.print_line(f"Tesseract executable found at: {self.tesseract_path}", 1)
+
                 neuro_url = config.get("neuro_url")
                 if neuro_url:
                     parsed = urlparse(str(neuro_url).strip())
@@ -941,8 +993,8 @@ class TerminalApp(NeuroIntegrationRuntimeMixin):
             raise ValueError("expected normalized screen coordinates")
 
         configured_regions = configuration_data.get("regions")
-        if not isinstance(configured_regions, list) or len(configured_regions) != 2:
-            raise ValueError("exactly two regions are required")
+        if not isinstance(configured_regions, list) or len(configured_regions) not in (OCR_REGION_COUNT - 1, OCR_REGION_COUNT):
+            raise ValueError(f"exactly {OCR_REGION_COUNT} regions are required")
 
         parsed_regions: list[tuple[float, float, float, float]] = []
         for region in configured_regions:
