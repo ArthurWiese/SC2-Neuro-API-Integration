@@ -267,7 +267,7 @@ class NeuroIntegrationRuntimeMixin(OCRRuntimeMixin):
         loop = asyncio.get_running_loop()
         capture_failed = False
         while True:
-            if not self._in_mission:
+            if not self._in_mission or self._game_is_paused:
                 await asyncio.sleep(0.5)
                 continue
             capture_started = loop.time()
@@ -275,6 +275,7 @@ class NeuroIntegrationRuntimeMixin(OCRRuntimeMixin):
                 await asyncio.to_thread(self._save_ocr_crops, regions)
                 if self.tesseract_path is not None:
                     recognized_tokens = await asyncio.to_thread(self._read_ocr_crops, self.tesseract_path)
+                    self.print_line(f"OCR recognized tokens: {recognized_tokens}", 3)
                     for index, tokens in enumerate(recognized_tokens):
                         text = self._stable_ocr_prefix(index, tokens)
                         if text is None:
@@ -645,6 +646,8 @@ class NeuroIntegrationRuntimeMixin(OCRRuntimeMixin):
 
         if self._in_mission and not new_in_mission or self._in_mission is None and not new_in_mission:
             self._in_mission = False
+            if self._last_game_state_active_value == 0:
+                return
             await self._send_neuro_context("The mission has ended; game cannot process commands until the next mission starts.")
             return
         elif not self._in_mission and new_in_mission or self._in_mission is None and new_in_mission:
@@ -1407,7 +1410,7 @@ class NeuroIntegrationRuntimeMixin(OCRRuntimeMixin):
                     action_command = self._action_queue.popleft()
 
                 await self._execute_queued_action_command(action_command)
-                self._action_queue_blocked_until = asyncio.get_running_loop().time() + 1.0
+                self._action_queue_blocked_until = asyncio.get_running_loop().time() + 1.5 # This should be more than one roundtrip time to avoid issues (guarantee actions and game have been updated from the last action)
                 await self._notify_action_queue_state_changed()
         except asyncio.CancelledError:
             pass

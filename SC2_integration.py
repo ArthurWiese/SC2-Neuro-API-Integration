@@ -490,7 +490,7 @@ class TerminalApp(NeuroIntegrationRuntimeMixin):
             case "start_integration" | "start":
                 return await self._start_integration()
 
-            case "stop_integration":
+            case "stop_integration" | "stop":
                 return await self._stop_integration()
 
 
@@ -548,7 +548,7 @@ class TerminalApp(NeuroIntegrationRuntimeMixin):
             if self.ocr_regions is None:
                 self._ocr_edit_regions = [
                     [int(screen_width * 0.12), int(screen_height * 0.2), int(screen_width * 0.35), int(screen_height * 0.14)],
-                    # [int(screen_width * 0.53), int(screen_height * 0.2), int(screen_width * 0.35), int(screen_height * 0.14)],
+                    [int(screen_width * 0.53), int(screen_height * 0.2), int(screen_width * 0.35), int(screen_height * 0.14)],
                     # [int(screen_width * 0.33), int(screen_height * 0.4), int(screen_width * 0.35), int(screen_height * 0.14)],
                 ]
             else:

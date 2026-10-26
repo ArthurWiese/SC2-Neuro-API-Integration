@@ -11,7 +11,7 @@ from pathlib import Path
 from PIL import Image, ImageChops, ImageEnhance, ImageGrab, ImageOps, ImageStat
 import pytesseract
 
-OCR_REGION_COUNT = 1
+OCR_REGION_COUNT = 2
 OCR_WHITE_PIXEL_THRESHOLD = 200
 OCR_BORDER_SEARCH_DISTANCE = 5
 OCR_DIALOGUE_BORDER_COLOR_DELTA = 15
@@ -75,8 +75,17 @@ class OCRRuntimeMixin:
                 except (TypeError, ValueError):
                     continue
                 token = token.strip()
-                if token and confidence_value >= 25:
-                    tokens.append(token.replace("|", "I"))
+                if len(token) <= 1 and token not in ("|", "I", "A", "a", "T", "X", "-", "—"):
+                    continue
+                if token and confidence_value >= 40:
+                    if token[:2] == "tt":
+                        token = "it" + token[2:]
+                    tokens.append(token.replace("|", "I").replace("VV", "W"))
+            for i, token in enumerate(tokens):
+                if ":" in token:
+                    if i > 0:
+                        tokens = tokens[i - 1:]
+                    break
             results.append(tokens)
 
         return results
@@ -395,7 +404,7 @@ class OCRRuntimeMixin:
         name, separator, message = text.partition(":")
         name = name.strip()
         message = message.strip()
-        message_ending = message.rstrip("\"'”’)]}»")
+        message_ending = message.rstrip("\"'”’()[]\{\}»1234567890_~=+*/\\|@#$%^&<>")
         if (
             not separator
             or not name
@@ -403,7 +412,7 @@ class OCRRuntimeMixin:
             or not any(character.isalpha() for character in name)
             or not any(character.isalnum() for character in message)
             or not message_ending
-            or message_ending[-1] not in ".,:;?!…-"
+            or message_ending[-1] not in ".,:;?!…-—"
             or "<" in message or ">" in message or "=" in message
         ):
             return None
