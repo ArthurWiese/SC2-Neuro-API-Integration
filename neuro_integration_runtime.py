@@ -1601,6 +1601,7 @@ class NeuroIntegrationRuntimeMixin(OCRRuntimeMixin):
         await self._notify_action_queue_state_changed()
         self._game_is_paused = False
         self._game_is_blocking = False
+        self._reset_ocr_runtime()
 
     async def _cleanup_bank_file(self) -> None:
         if self._bank_file_path is not None:

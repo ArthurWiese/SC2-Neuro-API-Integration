@@ -31,6 +31,7 @@ class OCRRuntimeMixin:
         self._last_ocr_valid_strings: list[str | None] = [None] * OCR_REGION_COUNT
         self._last_ocr_observations: list[str | None] = [None] * OCR_REGION_COUNT
         self._previous_ocr_tokens: list[list[str] | None] = [None] * OCR_REGION_COUNT
+        self._name_start_blocklist = ["player", self._display_name.casefold(), "rank"]
 
     def _reset_ocr_runtime(self) -> None:
         self._last_ocr_valid_strings = [None] * OCR_REGION_COUNT
@@ -404,7 +405,7 @@ class OCRRuntimeMixin:
         name, separator, message = text.partition(":")
         name = name.strip()
         message = message.strip()
-        message_ending = message.rstrip("\"'”’()[]\{\}»1234567890_~=+*/\\|@#$%^&<>")
+        message_ending = message.rstrip("\"'”’()[]{}»1234567890_~=+*/\\|@#$%^&<>")
         if (
             not separator
             or not name
@@ -417,7 +418,7 @@ class OCRRuntimeMixin:
         ):
             return None
 
-        if name.casefold().startswith("player") or name.casefold().startswith(self._display_name.casefold()):
+        if any(name.casefold().startswith(blocked) for blocked in self._name_start_blocklist):
             return None
 
         current = f"{name}: {message}"
