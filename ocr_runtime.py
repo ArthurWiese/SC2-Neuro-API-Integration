@@ -408,6 +408,7 @@ class OCRRuntimeMixin:
         if (
             not separator
             or not name
+            or len(name) <= 3
             or not message
             or not any(character.isalpha() for character in name)
             or not any(character.isalnum() for character in message)
