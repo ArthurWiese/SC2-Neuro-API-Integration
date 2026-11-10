@@ -85,6 +85,7 @@ class OCRRuntimeMixin:
                 if ":" in token:
                     if i > 0:
                         tokens = tokens[i - 1:]
+                        # I found one case where a name has more than one word (Dark Templar in MotV)
                     break
             results.append(tokens)
 
@@ -414,11 +415,13 @@ class OCRRuntimeMixin:
             or not any(character.isalnum() for character in message)
             or not message_ending
             or message_ending[-1] not in ".,:;?!…-—"
-            or "<" in message or ">" in message or "=" in message
         ):
             return None
+        message_must_not_contain = ["<", ">", "=", "»", "«"]
+        if any(character in message for character in message_must_not_contain):
+            return None
 
-        name_start_blocklist = ["player", self._display_name.casefold(), "rank"]
+        name_start_blocklist = ["player", self._display_name.casefold(), "rank", "life", "shield", "energy", "kills"]
         if any(name.casefold().startswith(blocked) for blocked in name_start_blocklist):
             return None
 
