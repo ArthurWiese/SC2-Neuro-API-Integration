@@ -83,9 +83,12 @@ class OCRRuntimeMixin:
                     tokens.append(token.replace("|", "I").replace("VV", "W"))
             for i, token in enumerate(tokens):
                 if ":" in token:
+                    if i == 1 and tokens[i] == "Templar:":
+                        tokens[i] = "Dark Templar:"
+                    if i == 1 and tokens[i] == "Marine:":
+                        tokens[i] = "Dominion Marine:"
                     if i > 0:
-                        tokens = tokens[i - 1:]
-                        # I found one case where a name has more than one word (Dark Templar in MotV)
+                        tokens = tokens[i:]
                     break
             results.append(tokens)
 
