@@ -87,6 +87,8 @@ class OCRRuntimeMixin:
                         tokens[i] = "Dark Templar:"
                     if i == 1 and tokens[i] == "Marine:":
                         tokens[i] = "Dominion Marine:"
+                    if i == 1 and tokens[i] == "Adjutant:":
+                        tokens[i] = "Confederate Adjutant:"
                     if i > 0:
                         tokens = tokens[i:]
                     break
