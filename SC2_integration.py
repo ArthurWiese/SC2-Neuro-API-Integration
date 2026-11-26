@@ -38,7 +38,7 @@ class TerminalApp(NeuroIntegrationRuntimeMixin):
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("SC2 Neuro Integration Terminal")
-        self.root.geometry("1300x660")
+        self.root.geometry("1500x650")
         self.root.minsize(960, 480)
         self.root.resizable(True, True)
         self.root.configure(bg=self.BG)
@@ -52,6 +52,7 @@ class TerminalApp(NeuroIntegrationRuntimeMixin):
         self.transcript_db_path: str | None = None
         self.neuro_url: str | None = None
         self.tesseract_path: str | None = None
+        self.auto_act_time: float = 0.0
         self._ui_queue: queue.Queue[tuple[str, int, bool]] = queue.Queue()
         self._ui_callback_queue: queue.Queue[Callable[[], None]] = queue.Queue()
         self._closing: bool = False
@@ -379,26 +380,27 @@ class TerminalApp(NeuroIntegrationRuntimeMixin):
             case "help" | "?":
                 self.print_line("  Command\t\tArguments\t\tDescription", 1, override_verbosity=True)
                 help_rows = [
-                    ("help", "", "Show this help text"),
-                    ("clear", "", "Clear history"),
-                    ("game_path", "<path>", "Set StarCraft II installation path (folder or StarCraft II.exe file)"),
-                    ("banks_path", "<path>", "Set banks path (...\\Documents\\StarCraft II\\Accounts\\...\\...\\Banks)"),
-                    ("transcript_db_path", "<path>", "Set the path to the Handy speech transcript database (voice context)"),
-                    ("tesseract_path", "<path>", "Set the path to the Tesseract OCR executable"),
+                    # ("help", "", "Show this help text"),
+                    # ("protocol_help", "", "Show available protocol commands that can be sent to the SC2 API"),
+                    ("start", "", "Start Neuro integration"),
+                    ("stop", "", "Stop Neuro integration"),
                     ("neuro_url", "<URL>", "Set the websocket server url used to connect to Neuro"),
+                    ("banks_path", "<path>", "Set banks path (...\\Documents\\StarCraft II\\Accounts\\...\\...\\Banks)"),
+                    ("transcript_db_path", "<path>", "Set the path to the Handy speech transcript database for voice context (...\\AppData\\Roaming\\com.pais.handy\\history.db)"),
+                    ("tesseract_path", "<path>", "Set the path to the Tesseract OCR executable (...\\Tesseract-OCR\\tesseract.exe)"),
                     ("configure_ocr", "", f"Place {OCR_REGION_COUNT} screen regions for OCR"),
-                    ("start_integration", "", "Start Neuro integration"),
-                    ("stop_integration", "", "Stop Neuro integration"),
-                    ("sc2_launch", "", "Launch StarCraft II and connect to API"),
-                    ("sc2_quit", "", "Quit StarCraft II"),
-                    ("sc2_disconnect", "", "Disconnect from StarCraft II API"),
-                    ("sc2_reconnect", "", "Reconnect to StarCraft II API"),
-                    ("quit, exit", "", "Close the terminal window"),
-                    ("listening_port", "int", "Configure the port that StarCraft II should listen on for API connections (default: 5000)"),
+                    ("auto_act_time", "<int/float>", "Automatically prompt the AI to act every given time interval in seconds. Deactivated with 0. (Default: 0)"),
+                    # ("sc2_launch", "", "Launch StarCraft II and connect to API"),
+                    # ("sc2_quit", "", "Quit StarCraft II"),
+                    # ("sc2_disconnect", "", "Disconnect from StarCraft II API"),
+                    # ("sc2_reconnect", "", "Reconnect to StarCraft II API"),
+                    # ("listening_port", "int", "Configure the port that StarCraft II should listen on for API connections (default: 5000)"),
+                    # ("game_path", "<path>", "Set StarCraft II installation path (folder or StarCraft II.exe file)"),
                     ("verbosity", "0/1/2/3", "Set the verbosity of terminal output. 0 = warnings/errors, 1 = info, 2 = verbose/debug, 3 = everything (default: 1)"),
-                    ("protocol_help", "", "Show available protocol commands that can be sent to the SC2 API"),
+                    # ("clear", "", "Clear history"),
+                    ("quit, exit", "", "Close the terminal window"),
                 ]
-                help_rows = sorted(help_rows, key=lambda x: x[0])
+                # help_rows = sorted(help_rows, key=lambda x: x[0])
                 return [f"  {command_name}\t\t{args}\t\t{desc}" for command_name, args, desc in help_rows]
 
             case "clear":
@@ -427,7 +429,22 @@ class TerminalApp(NeuroIntegrationRuntimeMixin):
                     # Don't fail the command if saving fails; just warn
                     self.print_line("Warning: Could not save verbosity to configuration.", 0)
                 return [f"Verbosity set to {self.VERBOSITY}"]
-            
+
+            case "auto_act_time":
+                if not argument_text:
+                    self.print_line(f"Current auto act time is {self.auto_act_time}s", 1)
+                    return ["Error: auto_act_time requires a number argument. Usage: auto_act_time <int/float>"]
+                try:
+                    auto_act_time = float(argument_text)
+                except ValueError:
+                    return ["Error: auto_act_time must be a non-negative number"]
+                if not math.isfinite(auto_act_time) or auto_act_time < 0:
+                    return ["Error: auto_act_time must be a finite, non-negative number"]
+                self.auto_act_time = round(auto_act_time, 2)
+                self._wake_auto_act_task()
+                self._save_configuration("auto_act_time", self.auto_act_time)
+                return [f"Auto act time set to {self.auto_act_time}s"] if self.auto_act_time != 0.0 else ["Auto act disabled"]
+
             case "listening_port":
                 # Needs to check if argument is a valid port number and port is unused
                 if not argument_text:
@@ -453,21 +470,21 @@ class TerminalApp(NeuroIntegrationRuntimeMixin):
                 if not argument_text:
                     if self.banks_path is not None:
                         self.print_line(f"Current banks path is {self.banks_path}", 1)
-                    return ["Error: banks_path requires a path argument. Usage: banks_path <path to Banks folder in Documents\\StarCraft II\\Accounts>"]
+                    return ["Error: banks_path requires a path argument. Usage: banks_path <path to ...\\Documents\\StarCraft II\\Accounts\\...\\...\\Banks>"]
                 return self._set_banks_path(argument_text)
 
             case "transcript_db_path":
                 if not argument_text:
                     if self.transcript_db_path is not None:
                         self.print_line(f"Current Handy transcript database path is {self.transcript_db_path}", 1)
-                    return ["Error: transcript_db_path requires a path argument. Usage: transcript_db_path <path to Handy transcript database>"]
+                    return ["Error: transcript_db_path requires a path argument. Usage: transcript_db_path <path to ...\\AppData\\Roaming\\com.pais.handy\\history.db>"]
                 return self._set_transcript_db_path(argument_text)
 
             case "tesseract_path":
                 if not argument_text:
                     if self.tesseract_path is not None:
                         self.print_line(f"Current Tesseract executable path is {self.tesseract_path}", 1)
-                    return ["Error: tesseract_path requires a path argument. Usage: tesseract_path <path to tesseract.exe>"]
+                    return ["Error: tesseract_path requires a path argument. Usage: tesseract_path <path to ...\\Tesseract-OCR\\tesseract.exe>"]
                 if not self.is_windows:
                     return ["Error: tesseract_path is currently supported only on Windows."]
                 return self._set_tesseract_path(argument_text)
@@ -759,6 +776,10 @@ class TerminalApp(NeuroIntegrationRuntimeMixin):
             return
 
         self.ocr_regions = regions
+        if self._event_loop is not None and self._event_loop.is_running():
+            self._event_loop.call_soon_threadsafe(self._set_ocr_capture_regions, regions)
+        else:
+            self._set_ocr_capture_regions(regions)
         self._destroy_ocr_overlay()
         self.print_line("OCR regions saved and overlay closed.", 1)
 
@@ -976,6 +997,21 @@ class TerminalApp(NeuroIntegrationRuntimeMixin):
                             self.print_line("Error: verbosity in configuration invalid; expected 0/1/2", 0)
                     except (ValueError, TypeError):
                         self.print_line("Error: verbosity in configuration invalid", 0)
+
+                auto_act_time_cfg = config.get("auto_act_time")
+                if auto_act_time_cfg is not None:
+                    try:
+                        auto_act_time = float(auto_act_time_cfg)
+                        if math.isfinite(auto_act_time) and auto_act_time >= 0:
+                            self.auto_act_time = round(auto_act_time, 2)
+                            if self.auto_act_time != 0.0:
+                                self.print_line(f"Configured Auto-act time: {self.auto_act_time}s", 1)
+                            else:
+                                self.print_line("Auto act is disabled", 1)
+                        else:
+                            self.print_line("Error: auto_act_time in configuration must be a finite, non-negative number", 0)
+                    except (OverflowError, TypeError, ValueError):
+                        self.print_line("Error: auto_act_time in configuration is invalid", 0)
 
                 ocr_regions_cfg = config.get("ocr_regions")
                 if ocr_regions_cfg is not None:

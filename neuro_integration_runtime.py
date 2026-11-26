@@ -47,7 +47,15 @@ class NeuroIntegrationRuntimeMixin(OCRRuntimeMixin):
         self._neuro_listener_task: asyncio.Task | None = None
         self._voice_transcript_monitor_task: asyncio.Task | None = None
         self._bank_monitor_task: asyncio.Task | None = None
+        self._auto_act_task: asyncio.Task | None = None
         self._backup_bank_monitor_task: asyncio.Task | None = None
+        self._ability_bank_monitor_task: asyncio.Task | None = None
+        self._command_mode_active: bool = False
+        self._awaiting_neuro_response: bool = False
+        self._pending_non_silent_context_ids: dict[int, float] = {}
+        self._non_silent_context_send_id: int = 0
+        self._auto_act_wakeup_event: asyncio.Event = asyncio.Event()
+        self._auto_act_last_reset_time: float = 0.0
         self._sc2_watchdog_task: asyncio.Task | None = None
         self._game_state_active_watchdog_task: asyncio.Task | None = None
         self._action_queue_worker_task: asyncio.Task | None = None
@@ -127,12 +135,15 @@ class NeuroIntegrationRuntimeMixin(OCRRuntimeMixin):
             await self._connect_neuro_websocket()
             await self._send_neuro_startup()
 
-            if self.is_windows and self.ocr_regions is not None:
+            if self.is_windows:
+                self._set_ocr_capture_regions(self.ocr_regions)
                 self._ocr_capture_task = asyncio.create_task(
-                    self._capture_ocr_crops(self.ocr_regions),
+                    self._capture_ocr_crops(),
                     name="ocr-screen-capture",
                 )
-                if self.tesseract_path is None:
+                if self.ocr_regions is None:
+                    self.print_line("OCR screen regions are not configured; screen crop capture is disabled.", 1)
+                elif self.tesseract_path is None:
                     self.print_line(
                         f"Capturing configured OCR screen regions every 0.2 seconds to "
                         f"{Path(__file__).resolve().parent / 'ocr_crops'}.\n"
@@ -161,6 +172,12 @@ class NeuroIntegrationRuntimeMixin(OCRRuntimeMixin):
 
             # Monitor the bank file for changes
             self._bank_monitor_task = asyncio.create_task(self._monitor_bank_changes(), name="bank-monitor")
+
+            # Start the auto act task that will send a non-silent context to Neuro if no action has been sent for a while
+            self._auto_act_task = asyncio.create_task(self._auto_act(), name="auto_act")
+
+            # Monitor the ability bank file
+            self._ability_bank_monitor_task = asyncio.create_task(self._monitor_ability_bank(), name="ability-bank-monitor")
 
             # Start SC2 process watchdog that will deactivate bank flags if SC2 exits
             self._sc2_watchdog_task = asyncio.create_task(self._monitor_sc2_process(), name="sc2-watchdog")
@@ -204,6 +221,7 @@ class NeuroIntegrationRuntimeMixin(OCRRuntimeMixin):
 
         self._neuro_session = session
         self._neuro_ws = ws
+        self._wake_auto_act_task()
         self.print_line("Connected to Neuro websocket.", 1)
 
         self._neuro_listener_task = asyncio.create_task(self._listen_neuro_messages(), name="neuro-listener")
@@ -243,6 +261,8 @@ class NeuroIntegrationRuntimeMixin(OCRRuntimeMixin):
         return False
 
     async def _close_neuro_connection(self) -> None:
+        self._wake_auto_act_task()
+
         if self._neuro_listener_task is not None:
             self._neuro_listener_task.cancel()
             try:
@@ -263,20 +283,32 @@ class NeuroIntegrationRuntimeMixin(OCRRuntimeMixin):
             finally:
                 self._neuro_session = None
 
-    async def _capture_ocr_crops(self, regions: list[tuple[float, float, float, float]]) -> None:
+    async def _capture_ocr_crops(self) -> None:
         loop = asyncio.get_running_loop()
         capture_failed = False
         while True:
-            if not self._in_mission or self._game_is_paused:
+            if not self._in_mission or self._game_is_paused or self._command_mode_active:
+                if self._command_mode_active:
+                    self._reset_ocr_runtime()
                 await asyncio.sleep(0.5)
                 continue
+            regions = self._ocr_capture_regions
+            if regions is None:
+                await asyncio.sleep(0.5)
+                continue
+
             capture_started = loop.time()
             try:
                 await asyncio.to_thread(self._save_ocr_crops, regions)
-                if self.tesseract_path is not None:
+                if regions is self._ocr_capture_regions and self.tesseract_path is not None:
                     recognized_tokens = await asyncio.to_thread(self._read_ocr_crops, self.tesseract_path)
+                    if regions is not self._ocr_capture_regions:
+                        await asyncio.sleep(max(0.0, 0.2 - (loop.time() - capture_started)))
+                        continue
                     self.print_line(f"OCR recognized tokens: {recognized_tokens}", 3)
                     for index, tokens in enumerate(recognized_tokens):
+                        if regions is not self._ocr_capture_regions:
+                            break
                         text = self._stable_ocr_prefix(index, tokens)
                         if text is None:
                             continue
@@ -300,7 +332,7 @@ class NeuroIntegrationRuntimeMixin(OCRRuntimeMixin):
         bank_file = Path(self.banks_path) / "NeuroIntegration.SC2Bank"
         self.print_line(f"Waiting for bank file at {bank_file}", 1)
         last_reminder_time = asyncio.get_running_loop().time()
-        reminder_interval_seconds = 30.0
+        reminder_interval_seconds = 60.0
     
         while True:
             if self._integration_stop_event is not None and self._integration_stop_event.is_set():
@@ -497,6 +529,37 @@ class NeuroIntegrationRuntimeMixin(OCRRuntimeMixin):
             return highest_backup_number - 1
         
         return highest_backup_number
+
+    async def _monitor_ability_bank(self) -> None:
+        '''Disable sending silent context to Neuro when Command Mode is active'''
+        while self._integration_stop_event is not None and not self._integration_stop_event.is_set():
+            try:
+                if self.banks_path is None:
+                    await asyncio.sleep(1.0)
+                    continue
+
+                ability_bank_file = Path(self.banks_path) / "NeuroIntegrationAbilities.SC2Bank"
+                if ability_bank_file.exists() and ability_bank_file.is_file():
+                    bank_data = parse_bank_file(ability_bank_file)
+                    if "game_state_campaign" in bank_data:
+                        game_state_campaign = bank_data.get("game_state_campaign", {})
+                        command_mode = game_state_campaign.get("command_mode", False)
+                        if command_mode and not self._command_mode_active:
+                            self._command_mode_active = True
+                            self._wake_auto_act_task()
+                            self.print_line("Command Mode is active; disabling silent context sending to Neuro.", 2)
+                        else:
+                            if self._command_mode_active and not command_mode:
+                                self._command_mode_active = False
+                                self._wake_auto_act_task()
+                                self.print_line("Command Mode is no longer active; re-enabling silent context sending to Neuro.", 2)
+
+                await asyncio.sleep(1.0)
+            except asyncio.CancelledError:
+                break
+            except (FileNotFoundError, ET.ParseError, OSError) as exc:
+                self.print_line(f"Ability bank monitor error: {exc}", 0)
+                await asyncio.sleep(1.0)
     
     async def _monitor_bank_changes(self) -> None:
         if self.banks_path is None or self._bank_file_path is None:
@@ -655,6 +718,7 @@ class NeuroIntegrationRuntimeMixin(OCRRuntimeMixin):
                 return  # Only send enter mission context if game is not paused when starting the integration
             self._in_mission = True
             self._in_mission_init = True
+            self._reset_auto_act_timer()
             await self._send_neuro_context("Entered mission; game can now process commands.")
 
         new_is_blocking = game_state.get("is_blocking", False)
@@ -970,10 +1034,98 @@ class NeuroIntegrationRuntimeMixin(OCRRuntimeMixin):
             return
         if self._neuro_ws is None:
             raise RuntimeError("Neuro websocket is not connected")
+        if self._command_mode_active and silent:
+            return
         payload = self._neuro_builder.context(message=message, silent=silent)
-        await self._neuro_ws.send_str(json.dumps(payload))
+        context_send_id: int | None = None
+        if not silent:
+            self._non_silent_context_send_id += 1
+            context_send_id = self._non_silent_context_send_id
+            self._pending_non_silent_context_ids[context_send_id] = asyncio.get_running_loop().time()
+            self._awaiting_neuro_response = True
+            self._wake_auto_act_task()
+        sent = False
+        try:
+            await self._neuro_ws.send_str(json.dumps(payload))
+            sent = True
+        finally:
+            if context_send_id is not None and not sent:
+                self._pending_non_silent_context_ids.pop(context_send_id, None)
+                self._awaiting_neuro_response = bool(self._pending_non_silent_context_ids)
+                self._wake_auto_act_task()
         self.print_line(f"Integration -> {self._display_name}: Context command.", 2)
         self.print_line(f"Context message: {message}", 2)
+
+    def _wake_auto_act_task(self) -> None:
+        self._auto_act_wakeup_event.set()
+
+    def _reset_auto_act_timer(self) -> None:
+        self._auto_act_last_reset_time = asyncio.get_running_loop().time()
+        self._wake_auto_act_task()
+
+    def _auto_act_conditions_met(self) -> bool:
+        return (
+            self._neuro_ws is not None
+            and not getattr(self._neuro_ws, "closed", False)
+            and not self._command_mode_active
+            and self._in_mission is True
+            and not self._game_is_paused
+            and not self._game_is_blocking
+            and bool(self._active_actions)
+            and not self._active_force_groups
+            and len(self._action_queue) <= 1
+        )
+
+    async def _auto_act(self) -> None:
+        loop = asyncio.get_running_loop()
+        current_interval = self.auto_act_time
+        if self._auto_act_last_reset_time == 0.0:
+            self._auto_act_last_reset_time = loop.time()
+
+        try:
+            while self._integration_stop_event is not None and not self._integration_stop_event.is_set():
+                interval = self.auto_act_time
+                if interval != current_interval:
+                    current_interval = interval
+                    self._auto_act_last_reset_time = loop.time()
+
+                self._auto_act_wakeup_event.clear()
+                if self._awaiting_neuro_response:
+                    latest_context_sent_at = max(
+                        self._pending_non_silent_context_ids.values(),
+                        default=loop.time(),
+                    )
+                    response_timeout = latest_context_sent_at + (2 * interval) - loop.time()
+                    if response_timeout <= 0:
+                        self._pending_non_silent_context_ids.clear()
+                        self._awaiting_neuro_response = False
+                        self._auto_act_last_reset_time = loop.time() - interval
+                        continue
+                    try:
+                        await asyncio.wait_for(self._auto_act_wakeup_event.wait(), timeout=response_timeout)
+                    except asyncio.TimeoutError:
+                        pass
+                    continue
+
+                if interval <= 0 or not self._auto_act_conditions_met():
+                    await self._auto_act_wakeup_event.wait()
+                    continue
+
+                remaining = interval - (loop.time() - self._auto_act_last_reset_time)
+                if remaining > 0:
+                    try:
+                        await asyncio.wait_for(self._auto_act_wakeup_event.wait(), timeout=remaining)
+                    except asyncio.TimeoutError:
+                        pass
+                    continue
+
+                try:
+                    await self._send_neuro_context("Perform an action", silent=False)
+                except (aiohttp.ClientError, OSError, RuntimeError) as exc:
+                    self.print_line(f"Auto act task error: {exc}", 0)
+                    await asyncio.sleep(0.5)
+        except asyncio.CancelledError:
+            raise
             
     async def _send_neuro_register_actions(self, actions: list[dict[str, Any]]) -> None:
         if self._neuro_ws is None:
@@ -1154,6 +1306,9 @@ class NeuroIntegrationRuntimeMixin(OCRRuntimeMixin):
             self.print_line(f"Neuro listener error: {exc}", 0)
 
     async def _handle_neuro_text_message(self, payload_text: str) -> None:
+        self._awaiting_neuro_response = False
+        self._pending_non_silent_context_ids.clear()
+        self._reset_auto_act_timer()
         self.print_line(f"{self._display_name} -> Integration: Received message.", 2)
         self.print_line(f"Message: {payload_text}", 2)
 
@@ -1360,6 +1515,7 @@ class NeuroIntegrationRuntimeMixin(OCRRuntimeMixin):
         return None
 
     async def _notify_action_queue_state_changed(self) -> None:
+        self._wake_auto_act_task()
         async with self._action_queue_condition:
             self._action_queue_condition.notify_all()
 
@@ -1409,6 +1565,7 @@ class NeuroIntegrationRuntimeMixin(OCRRuntimeMixin):
                     # Is within the 0.3s window
                     action_command = self._action_queue.popleft()
 
+                await self._notify_action_queue_state_changed()
                 await self._execute_queued_action_command(action_command)
                 self._action_queue_blocked_until = asyncio.get_running_loop().time() + 1.5 # This should be more than one roundtrip time to avoid issues (guarantee actions and game have been updated from the last action)
                 await self._notify_action_queue_state_changed()
@@ -1598,10 +1755,13 @@ class NeuroIntegrationRuntimeMixin(OCRRuntimeMixin):
         if self._active_force_groups:
             self._active_force_groups = []
         self._action_queue.clear()
-        await self._notify_action_queue_state_changed()
         self._game_is_paused = False
         self._game_is_blocking = False
         self._reset_ocr_runtime()
+        self._awaiting_neuro_response = False
+        self._pending_non_silent_context_ids.clear()
+        self._reset_auto_act_timer()
+        await self._notify_action_queue_state_changed()
 
     async def _cleanup_bank_file(self) -> None:
         if self._bank_file_path is not None:
@@ -1613,6 +1773,14 @@ class NeuroIntegrationRuntimeMixin(OCRRuntimeMixin):
         await self._cleanup_communication()
 
     async def _cleanup_integration_runtime(self) -> None:
+        if self._auto_act_task is not None:
+            self._auto_act_task.cancel()
+            try:
+                await self._auto_act_task
+            except asyncio.CancelledError:
+                pass
+            self._auto_act_task = None
+
         if self._ocr_capture_task is not None:
             self._ocr_capture_task.cancel()
             try:
@@ -1621,7 +1789,7 @@ class NeuroIntegrationRuntimeMixin(OCRRuntimeMixin):
                 pass
             self._ocr_capture_task = None
 
-        self._reset_ocr_runtime()
+        self._set_ocr_capture_regions(None)
 
         if self._bank_monitor_task is not None:
             self._bank_monitor_task.cancel()
@@ -1646,6 +1814,14 @@ class NeuroIntegrationRuntimeMixin(OCRRuntimeMixin):
             except asyncio.CancelledError:
                 pass
             self._backup_bank_monitor_task = None
+
+        if self._ability_bank_monitor_task is not None:
+            self._ability_bank_monitor_task.cancel()
+            try:
+                await self._ability_bank_monitor_task
+            except asyncio.CancelledError:
+                pass
+            self._ability_bank_monitor_task = None
 
         if self._sc2_watchdog_task is not None:
             self._sc2_watchdog_task.cancel()
@@ -1701,6 +1877,11 @@ class NeuroIntegrationRuntimeMixin(OCRRuntimeMixin):
         self._action_queue_blocked_until = 0.0
         self._bank_write_lock = None
         self._bank_update_in_progress = False
+        self._awaiting_neuro_response = False
+        self._pending_non_silent_context_ids.clear()
+        self._non_silent_context_send_id = 0
+        self._auto_act_last_reset_time = 0.0
+        self._auto_act_wakeup_event.clear()
         self._session_id = None
         self._character_id = "neuro"
         self._display_name = "Neuro-sama"

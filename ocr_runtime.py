@@ -28,9 +28,17 @@ OCR_BACKGROUND_DARKEN_FACTOR = 0.5
 class OCRRuntimeMixin:
     def _initialize_ocr_runtime(self) -> None:
         self._ocr_capture_task: asyncio.Task | None = None
+        self._ocr_capture_regions: list[tuple[float, float, float, float]] | None = None
         self._last_ocr_valid_strings: list[str | None] = [None] * OCR_REGION_COUNT
         self._last_ocr_observations: list[str | None] = [None] * OCR_REGION_COUNT
         self._previous_ocr_tokens: list[list[str] | None] = [None] * OCR_REGION_COUNT
+
+    def _set_ocr_capture_regions(
+        self,
+        regions: list[tuple[float, float, float, float]] | None,
+    ) -> None:
+        self._ocr_capture_regions = regions
+        self._reset_ocr_runtime()
 
     def _reset_ocr_runtime(self) -> None:
         self._last_ocr_valid_strings = [None] * OCR_REGION_COUNT
